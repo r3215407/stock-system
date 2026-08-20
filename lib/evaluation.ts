@@ -73,7 +73,7 @@ export function normalizeSymbol(input: string | string[] | undefined) {
   if (!match) return { raw: normalizedInput, normalized: "", valid: false };
 
   const code = match[1];
-  const inferredMarket = /^(?:4|8|92)/.test(code) ? "BJ" : code.startsWith("6") ? "SH" : "SZ";
+  const inferredMarket = /^(?:4|8|92)/.test(code) ? "BJ" : /^[56]/.test(code) ? "SH" : "SZ";
   return {
     raw: normalizedInput,
     normalized: `${code}.${inferredMarket}`,
