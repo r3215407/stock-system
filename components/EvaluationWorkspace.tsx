@@ -355,7 +355,20 @@ export default function EvaluationWorkspace({ snapshot }: { snapshot: MarketData
                     </div>
                   </summary>
                   <div className="mt-4 grid gap-3 border-l-2 border-[#E3EFF4] pl-4 text-[13px] leading-5 text-[#476775] sm:grid-cols-2">
-                    <p>{module.reason}</p>
+                    {module.details?.length ? (
+                      <div className="flex flex-wrap gap-x-4 gap-y-2">
+                        {module.details.map((detail) => (
+                          <span className="whitespace-nowrap" key={detail.label}>
+                            <span className="text-[#476775]">{detail.label} </span>
+                            <strong
+                              className={`font-semibold tabular-nums ${detail.status === "pass" ? "text-[#237A65]" : detail.status === "fail" ? "text-[#B44D5C]" : "text-[#647985]"}`}
+                            >
+                              {detail.value}
+                            </strong>
+                          </span>
+                        ))}
+                      </div>
+                    ) : <p>{module.reason}</p>}
                     <p>数据日期：{snapshot.dataDate} · 已判定 {module.determined} / {module.total} 分</p>
                   </div>
                 </details>

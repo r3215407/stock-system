@@ -258,6 +258,13 @@ function buildAutomaticEvaluation(bars: DailyBar[]) {
       total: 30,
       pending: 0,
       reason: `C/MA20差值 ${percent(current.close / currentMa20 - 1)}；MA20五日斜率 ${percent(ma20Slope)}；20日收益 ${percent(return20)}。`,
+      details: [
+        { label: "C/MA20差值", value: percent(current.close / currentMa20 - 1), status: trendConditions[0].passed ? "pass" : "fail" },
+        { label: "MA5 / MA10", value: `¥${currentMa5.toFixed(2)} / ¥${currentMa10.toFixed(2)}`, status: trendConditions[1].passed ? "pass" : "fail" },
+        { label: "MA10 / MA20", value: `¥${currentMa10.toFixed(2)} / ¥${currentMa20.toFixed(2)}`, status: trendConditions[2].passed ? "pass" : "fail" },
+        { label: "MA20五日斜率", value: percent(ma20Slope), status: trendConditions[3].passed ? "pass" : "fail" },
+        { label: "20日收益", value: percent(return20), status: trendConditions[4].passed ? "pass" : "fail" },
+      ],
       source: "自动",
     },
     {
@@ -268,6 +275,12 @@ function buildAutomaticEvaluation(bars: DailyBar[]) {
       total: 25,
       pending: 0,
       reason: `最长回落或横盘 ${longestWeakRun} 日；回调幅度 ${percent(pullbackAmplitude)}；低点距MA20 ${percent(lowDistanceToMa20)}。`,
+      details: [
+        { label: "最长回落或横盘", value: `${longestWeakRun}日`, status: pullbackConditions[0].passed ? "pass" : "fail" },
+        { label: "回调幅度", value: percent(pullbackAmplitude), status: pullbackConditions[1].passed ? "pass" : "fail" },
+        { label: "低点距MA20", value: percent(lowDistanceToMa20), status: pullbackConditions[2].passed ? "pass" : "fail" },
+        { label: "回调保持在MA60上方", value: pullbackAboveMa60 ? "是" : "否", status: pullbackConditions[3].passed ? "pass" : "fail" },
+      ],
       source: "自动",
     },
     {
@@ -278,6 +291,13 @@ function buildAutomaticEvaluation(bars: DailyBar[]) {
       total: 35,
       pending: 0,
       reason: `日内涨幅 ${percent(current.close / current.open - 1)}；前三日最高收盘 ¥${priorThreeHigh.toFixed(2)}；MACD(12,26,9)柱 ${histogram[lastIndex].toFixed(4)}。`,
+      details: [
+        { label: "日内涨幅", value: percent(current.close / current.open - 1), status: strengthConditions[0].passed ? "pass" : "fail" },
+        { label: "较前收盘", value: percent(current.close / previous.close - 1), status: strengthConditions[1].passed ? "pass" : "fail" },
+        { label: "重新站上MA5", value: `收盘 ¥${current.close.toFixed(2)} / MA5 ¥${currentMa5.toFixed(2)}`, status: strengthConditions[2].passed ? "pass" : "fail" },
+        { label: "突破前三日高", value: `收盘 ¥${current.close.toFixed(2)} / 阈值 ¥${priorThreeHigh.toFixed(2)}`, status: strengthConditions[3].passed ? "pass" : "fail" },
+        { label: "MACD柱改善", value: histogram[lastIndex].toFixed(4), status: strengthConditions[4].passed ? "pass" : "fail" },
+      ],
       source: "自动",
     },
   ];
@@ -327,6 +347,11 @@ function buildMarketEnvironmentModule(bars: DailyBar[]): ScoreModule {
     total: 10,
     pending: 0,
     reason: `中证全指收盘/MA20 ${current.close.toFixed(2)} / ${currentMa20.toFixed(2)}；MA20五日变化 ${percent(currentMa20 / ma20FiveDaysAgo - 1)}；5日收益 ${percent(return5)}。`,
+    details: [
+      { label: "中证全指收盘 / MA20", value: `${current.close.toFixed(2)} / ${currentMa20.toFixed(2)}`, status: conditions[0].passed ? "pass" : "fail" },
+      { label: "MA20五日变化", value: percent(currentMa20 / ma20FiveDaysAgo - 1), status: conditions[1].passed ? "pass" : "fail" },
+      { label: "5日收益", value: percent(return5), status: conditions[2].passed ? "pass" : "fail" },
+    ],
     source: "自动",
   };
 }

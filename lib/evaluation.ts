@@ -10,6 +10,11 @@ export type ScoreModule = {
   failed: number;
   pending: number;
   reason: string;
+  details?: Array<{
+    label: string;
+    value: string;
+    status: EvaluationStatus;
+  }>;
   source: "自动" | "用户确认" | "混合";
 };
 
