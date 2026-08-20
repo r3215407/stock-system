@@ -1,0 +1,30 @@
+# dependencies
+/node_modules
+
+# Next.js build output
+/.next
+/out
+/.next-profiles
+
+# generated TypeScript files
+next-env.d.ts
+*.tsbuildinfo
+
+# generated and intermediate assets
+/output
+
+# local environment files
+.env*
+!.env.example
+
+# local system files
+.DS_Store
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# editor files
+.idea
+.vscode
+*.swp
