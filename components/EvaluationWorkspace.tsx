@@ -342,9 +342,12 @@ export default function EvaluationWorkspace({ snapshot }: { snapshot: MarketData
                   <summary className="flex cursor-pointer list-none items-center justify-between gap-4 outline-none">
                     <div>
                       <h3 className="text-sm font-semibold text-[#102C3A]">{module.label}</h3>
-                      <p className="mt-1 text-[12px] text-[#718C98]">
-                        通过 {module.passed} · 不通过 {module.failed} · 未知 {module.pending} · {module.source}
-                      </p>
+                      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] leading-[18px]">
+                        <span className="font-medium text-[#237A65] tabular-nums">✓ 通过 {module.passed}</span>
+                        <span className="font-medium text-[#B44D5C] tabular-nums">× 不通过 {module.failed}</span>
+                        <span className="text-[#647985] tabular-nums">? 未知 {module.pending}</span>
+                        <span className="text-[#718C98]">· {module.source}</span>
+                      </div>
                     </div>
                     <div className="flex items-center gap-4">
                       <span className="text-lg font-semibold tabular-nums">{module.earned} / {module.total}</span>
