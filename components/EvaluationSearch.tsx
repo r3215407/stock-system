@@ -14,12 +14,12 @@ export default function EvaluationSearch({
       <label className="block text-[13px] font-[550] leading-[18px] text-[#102C3A]" htmlFor="evaluation-symbol">
         A股 / 场内基金代码
       </label>
-      <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+      <div className="mt-2 grid grid-cols-[minmax(0,1fr)_104px] gap-2 sm:flex sm:flex-row">
         <input
           aria-describedby={error ? "evaluation-symbol-error" : "evaluation-symbol-help"}
           aria-invalid={Boolean(error)}
           autoComplete="off"
-          className="h-12 min-w-0 flex-1 rounded-[6px] border border-[#C9DEE8] bg-white px-4 text-base font-medium text-[#102C3A] outline-none placeholder:font-normal placeholder:text-[#718C98] focus:border-[#3B91AE] focus:ring-2 focus:ring-[#69D2E7]/25 aria-[invalid=true]:border-[#B44D5C] tabular-nums"
+          className="h-12 min-w-0 flex-1 rounded-[6px] border border-[#C9DEE8] bg-white px-3 text-base font-medium text-[#102C3A] outline-none placeholder:font-normal placeholder:text-[#718C98] focus:border-[#3B91AE] focus:ring-2 focus:ring-[#69D2E7]/25 aria-[invalid=true]:border-[#B44D5C] tabular-nums sm:px-4"
           defaultValue={defaultValue}
           id="evaluation-symbol"
           name="symbol"
@@ -27,12 +27,12 @@ export default function EvaluationSearch({
           maxLength={6}
           minLength={6}
           pattern="[0-9]{6}"
-          placeholder="输入代码，例如 600519 或 159915"
+          placeholder="例如 600519"
           required
           type="text"
         />
         <button
-          className="inline-flex h-12 min-w-[120px] items-center justify-center rounded-[6px] bg-[#3B91AE] px-6 text-sm font-semibold text-white outline-none transition-colors hover:bg-[#25748F] focus-visible:ring-2 focus-visible:ring-[#69D2E7] focus-visible:ring-offset-2"
+          className="inline-flex h-12 min-w-0 items-center justify-center rounded-[6px] bg-[#3B91AE] px-3 text-sm font-semibold text-white outline-none transition-colors hover:bg-[#25748F] focus-visible:ring-2 focus-visible:ring-[#69D2E7] focus-visible:ring-offset-2 sm:min-w-[120px] sm:px-6"
           type="submit"
         >
           开始评估

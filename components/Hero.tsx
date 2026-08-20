@@ -182,28 +182,28 @@ export default function Hero({
                 A股 / 场内基金代码
               </label>
 
-              <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:gap-2">
+              <div className="mt-2 grid grid-cols-[minmax(0,1fr)_108px] gap-2 sm:flex sm:flex-row">
                 <input
                   aria-describedby="hero-stock-code-help hero-stock-code-disclaimer"
                   autoComplete="off"
-                  className="h-[52px] min-w-0 flex-1 rounded-[4px] border border-[#C9DEE8] bg-white px-4 text-base font-medium leading-6 text-[#102C3A] outline-none transition-colors placeholder:font-normal placeholder:text-[#718C98] hover:border-[#A7C8D7] focus:border-[#3B91AE] focus:ring-2 focus:ring-[#69D2E7]/25 invalid:not-placeholder-shown:border-[#B44D5C] tabular-nums"
+                  className="h-[52px] min-w-0 flex-1 rounded-[4px] border border-[#C9DEE8] bg-white px-3 text-base font-medium leading-6 text-[#102C3A] outline-none transition-colors placeholder:font-normal placeholder:text-[#718C98] hover:border-[#A7C8D7] focus:border-[#3B91AE] focus:ring-2 focus:ring-[#69D2E7]/25 invalid:not-placeholder-shown:border-[#B44D5C] tabular-nums sm:px-4"
                   id="hero-stock-code"
                   inputMode="numeric"
                   maxLength={6}
                   minLength={6}
                   name="symbol"
                   pattern="[0-9]{6}"
-                  placeholder="输入六位代码，例如 600519 或 159915"
+                  placeholder="例如 600519"
                   required
                   title="请输入六位A股或场内基金代码，例如 600519、159915"
                   type="text"
                 />
                 <button
-                  className="inline-flex h-[52px] min-w-[120px] items-center justify-center gap-2 rounded-[4px] bg-[#3B91AE] px-6 text-[15px] font-semibold leading-[22px] text-white outline-none transition-colors hover:bg-[#25748F] active:bg-[#1E5A70] focus-visible:ring-2 focus-visible:ring-[#69D2E7] focus-visible:ring-offset-2 focus-visible:ring-offset-[#F8FBFD] disabled:cursor-not-allowed disabled:bg-[#9FB3BC]"
+                  className="inline-flex h-[52px] min-w-0 items-center justify-center gap-1.5 rounded-[4px] bg-[#3B91AE] px-3 text-[14px] font-semibold leading-[22px] text-white outline-none transition-colors hover:bg-[#25748F] active:bg-[#1E5A70] focus-visible:ring-2 focus-visible:ring-[#69D2E7] focus-visible:ring-offset-2 focus-visible:ring-offset-[#F8FBFD] disabled:cursor-not-allowed disabled:bg-[#9FB3BC] sm:min-w-[120px] sm:gap-2 sm:px-6 sm:text-[15px]"
                   type="submit"
                 >
                   开始评估
-                  <ArrowRightIcon className="size-4" />
+                  <ArrowRightIcon className="hidden size-4 sm:block" />
                 </button>
               </div>
 
