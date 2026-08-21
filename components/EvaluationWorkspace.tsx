@@ -44,7 +44,7 @@ function StatusBadge({ status, children }: { status: EvaluationStatus; children:
   }[status];
 
   return (
-    <span className={`inline-flex min-h-6 items-center gap-1 rounded-full border px-2 text-[12px] font-medium ${styles}`}>
+    <span className={`inline-flex min-h-6 shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-2 text-[12px] font-medium ${styles}`}>
       <span aria-hidden="true">{status === "pass" ? "✓" : status === "fail" ? "×" : "?"}</span>
       {children}
     </span>
@@ -300,10 +300,10 @@ export default function EvaluationWorkspace({ snapshot }: { snapshot: MarketData
                 <h3 className="text-sm font-semibold text-[#102C3A]">自动检查</h3>
                 <div className="mt-3 divide-y divide-[#E3EFF4] border-y border-[#E3EFF4]">
                   {snapshot.automaticFilters.map((filter) => (
-                    <div className="flex min-h-14 items-center justify-between gap-4 py-3" key={filter.label}>
-                      <div>
-                        <p className="text-sm font-medium text-[#102C3A]">{filter.label}</p>
-                        <p className="mt-0.5 text-[12px] text-[#718C98]">{filter.detail}</p>
+                    <div className="flex min-h-14 min-w-0 items-center justify-between gap-4 py-3" key={filter.label}>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-[#102C3A]" title={filter.label}>{filter.label}</p>
+                        <p className="mt-0.5 truncate text-[12px] text-[#718C98]" title={filter.detail}>{filter.detail}</p>
                       </div>
                       <StatusBadge status={filter.status}>
                         {filter.status === "pass" ? "通过" : filter.status === "fail" ? "失败" : "待数据"}
