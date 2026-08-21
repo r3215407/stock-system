@@ -14,12 +14,12 @@ export default function EvaluationSearch({
       <label className="block text-[13px] font-[550] leading-[18px] text-[#102C3A]" htmlFor="evaluation-symbol">
         A股 / 场内基金代码
       </label>
-      <div className="mt-2 grid grid-cols-[minmax(0,1fr)_104px] gap-2 sm:flex sm:flex-row">
+      <div className="mt-2 grid grid-cols-[minmax(0,1fr)_108px] gap-2 rounded-[20px] border border-[#102C3A]/15 bg-white/85 p-1.5 shadow-[0_12px_32px_-18px_rgba(20,30,80,0.22)] sm:flex sm:flex-row">
         <input
           aria-describedby={error ? "evaluation-symbol-error" : "evaluation-symbol-help"}
           aria-invalid={Boolean(error)}
           autoComplete="off"
-          className="h-12 min-w-0 flex-1 rounded-[6px] border border-[#C9DEE8] bg-white px-3 text-base font-medium text-[#102C3A] outline-none placeholder:font-normal placeholder:text-[#718C98] focus:border-[#3B91AE] focus:ring-2 focus:ring-[#69D2E7]/25 aria-[invalid=true]:border-[#B44D5C] tabular-nums sm:px-4"
+          className="h-12 min-w-0 flex-1 rounded-2xl border-0 bg-transparent px-3 text-base font-medium text-[#102C3A] outline-none placeholder:font-normal placeholder:text-[#718C98] focus:bg-[#F7F8F6] aria-[invalid=true]:text-[#B44D5C] tabular-nums sm:px-4"
           defaultValue={defaultValue}
           id="evaluation-symbol"
           name="symbol"
@@ -32,7 +32,7 @@ export default function EvaluationSearch({
           type="text"
         />
         <button
-          className="inline-flex h-12 min-w-0 items-center justify-center rounded-[6px] bg-[#3B91AE] px-3 text-sm font-semibold text-white outline-none transition-colors hover:bg-[#25748F] focus-visible:ring-2 focus-visible:ring-[#69D2E7] focus-visible:ring-offset-2 sm:min-w-[120px] sm:px-6"
+          className="inline-flex h-12 min-w-0 items-center justify-center rounded-full bg-[#102C3A] px-3 text-sm font-semibold text-white outline-none transition-transform hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-[#5661D9] focus-visible:ring-offset-2 sm:min-w-[124px] sm:px-6"
           type="submit"
         >
           开始评估

@@ -53,10 +53,10 @@ function StatusBadge({ status, children }: { status: EvaluationStatus; children:
 
 function SectionHeading({ index, title, description }: { index: string; title: string; description?: string }) {
   return (
-    <div className="flex items-start gap-4 border-b border-[#E3EFF4] pb-4">
-      <span className="pt-1 font-mono text-[11px] text-[#718C98]">{index}</span>
+    <div className="flex items-start gap-4">
+      <span className="mt-1 inline-flex min-h-6 items-center rounded-full border border-[#102C3A]/15 bg-white/60 px-2 font-mono text-[11px] text-[#718C98]">{index}</span>
       <div>
-        <h2 className="text-[20px] font-semibold leading-7 tracking-[-0.01em] text-[#102C3A]">{title}</h2>
+        <h2 className="text-[26px] font-semibold leading-8 tracking-[-0.025em] text-[#102C3A] sm:text-[30px]">{title}</h2>
         {description ? <p className="mt-1 text-sm leading-[22px] text-[#476775]">{description}</p> : null}
       </div>
     </div>
@@ -79,10 +79,10 @@ function Question({
   return (
     <fieldset className="border-0 p-0">
       <legend className="text-sm font-semibold leading-[22px] text-[#102C3A]">{legend}</legend>
-      <div className="mt-3 divide-y divide-[#E3EFF4] border-y border-[#E3EFF4]">
+      <div className="mt-3 overflow-hidden rounded-[20px] border border-[#102C3A]/15 bg-white/70 divide-y divide-[#E3EFF4]">
         {options.map((option) => (
           <label
-            className="flex min-h-14 cursor-pointer items-center gap-3 px-1 py-3 outline-none transition-colors hover:bg-[#F1F7FA]"
+            className="flex min-h-14 cursor-pointer items-center gap-3 px-4 py-3 outline-none transition-colors hover:bg-[#F0F4F4]"
             key={option.value}
           >
             <input
@@ -120,7 +120,7 @@ function NumberField({
   return (
     <label className="block">
       <span className="block text-[13px] font-[550] leading-[18px] text-[#102C3A]">{label}</span>
-      <span className="mt-2 flex h-12 overflow-hidden rounded-[6px] border border-[#C9DEE8] bg-white focus-within:border-[#3B91AE] focus-within:ring-2 focus-within:ring-[#69D2E7]/25">
+      <span className="mt-2 flex h-12 overflow-hidden rounded-2xl border border-[#102C3A]/15 bg-white focus-within:border-[#5661D9] focus-within:ring-2 focus-within:ring-[#5661D9]/15">
         <input
           className="min-w-0 flex-1 bg-transparent px-3 text-sm font-medium text-[#102C3A] outline-none disabled:bg-[#F1F7FA] disabled:text-[#647985] tabular-nums"
           disabled={disabled}
@@ -130,7 +130,7 @@ function NumberField({
           type="number"
           value={value}
         />
-        <span className="grid min-w-11 place-items-center border-l border-[#E3EFF4] bg-[#F8FBFD] px-3 text-[12px] text-[#718C98]">
+        <span className="grid min-w-11 place-items-center border-l border-[#E3EFF4] bg-[#F7F8F6] px-3 text-[12px] text-[#718C98]">
           {unit}
         </span>
       </span>
@@ -256,14 +256,14 @@ export default function EvaluationWorkspace({ snapshot }: { snapshot: MarketData
   }
 
   return (
-    <div className="mt-10">
+    <div className="mt-14">
       <div className="grid gap-12 lg:grid-cols-12 lg:gap-8">
         <div className="lg:col-span-8">
-          <div className="border-y border-[#C9DEE8] bg-[#F1F7FA] px-4 py-3 text-[13px] leading-5 text-[#476775] sm:px-5">
+          <div className="rounded-[16px] border border-[#102C3A]/12 bg-white/60 px-4 py-3 text-[13px] leading-5 text-[#476775] sm:px-5">
             行情来源：{snapshot.provider} · 拉取时间 {new Date(snapshot.fetchedAt).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai", hour12: false })} · {snapshot.adjustment}日线。数据仅用于模型评估，请与交易所或券商行情复核。
           </div>
 
-          <section className="mt-8 border-b border-[#C9DEE8] pb-8" aria-labelledby="stock-summary-title">
+          <section className="mt-5 rounded-[20px] border border-[#102C3A]/15 bg-white/80 p-5 sm:p-7" aria-labelledby="stock-summary-title">
         <div className="flex flex-col justify-between gap-6 md:flex-row md:items-end">
           <div>
             <p className="text-[12px] leading-[18px] text-[#718C98]">{snapshot.instrumentType}摘要 · {snapshot.stage}</p>
@@ -292,13 +292,13 @@ export default function EvaluationWorkspace({ snapshot }: { snapshot: MarketData
         </div>
           </section>
 
-          <div className="mt-12 space-y-14">
+          <div className="mt-20 space-y-24">
           <section id="hard-filters" aria-labelledby="hard-filters-title">
             <SectionHeading index="01" title="硬性过滤" description="任何明确失败都不能被评分覆盖。" />
             <div className="mt-6 grid gap-8 lg:grid-cols-2">
               <div>
                 <h3 className="text-sm font-semibold text-[#102C3A]">自动检查</h3>
-                <div className="mt-3 divide-y divide-[#E3EFF4] border-y border-[#E3EFF4]">
+                <div className="mt-3 overflow-hidden rounded-[20px] border border-[#102C3A]/15 bg-white/70 px-4 divide-y divide-[#E3EFF4]">
                   {snapshot.automaticFilters.map((filter) => (
                     <div className="flex min-h-14 min-w-0 items-center justify-between gap-4 py-3" key={filter.label}>
                       <div className="min-w-0 flex-1">
@@ -341,21 +341,21 @@ export default function EvaluationWorkspace({ snapshot }: { snapshot: MarketData
 
           <section id="score-details" aria-labelledby="score-details-title">
             <SectionHeading index="02" title="评分明细" description="技术指标占90分，市场环境由中证全指自动计算10分。" />
-            <div className="mt-6 grid gap-3 sm:grid-cols-3">
-              <div className={`border px-4 py-3 ${result.technicalGatePassed ? "border-[#A8DCCF] bg-[#ECF8F4]" : "border-[#E7D29B] bg-[#FFF8E8]"}`}>
+            <div className="mt-8 grid gap-3 sm:grid-cols-3">
+              <div className={`rounded-[16px] border px-4 py-4 ${result.technicalGatePassed ? "border-[#A8DCCF] bg-[#ECF8F4]" : "border-[#E7D29B] bg-[#FFF8E8]"}`}>
                 <p className="text-[12px] text-[#718C98]">技术面门槛</p>
                 <p className="mt-1 text-sm font-semibold tabular-nums">{result.technicalScore} / 90 · 至少 {minimumTechnicalScore}</p>
               </div>
-              <div className={`border px-4 py-3 ${result.strengthGatePassed ? "border-[#A8DCCF] bg-[#ECF8F4]" : "border-[#E7D29B] bg-[#FFF8E8]"}`}>
+              <div className={`rounded-[16px] border px-4 py-4 ${result.strengthGatePassed ? "border-[#A8DCCF] bg-[#ECF8F4]" : "border-[#E7D29B] bg-[#FFF8E8]"}`}>
                 <p className="text-[12px] text-[#718C98]">重新转强门槛</p>
                 <p className="mt-1 text-sm font-semibold tabular-nums">{result.strengthScore} / 35 · 至少 {minimumStrengthScore}</p>
               </div>
-              <div className={`border px-4 py-3 ${result.triggerGatePassed ? "border-[#A8DCCF] bg-[#ECF8F4]" : "border-[#E7D29B] bg-[#FFF8E8]"}`}>
+              <div className={`rounded-[16px] border px-4 py-4 ${result.triggerGatePassed ? "border-[#A8DCCF] bg-[#ECF8F4]" : "border-[#E7D29B] bg-[#FFF8E8]"}`}>
                 <p className="text-[12px] text-[#718C98]">关键触发器</p>
                 <p className="mt-1 text-sm font-semibold">{result.triggerGatePassed ? "已触发" : "尚未触发"}</p>
               </div>
             </div>
-            <div className="mt-6 divide-y divide-[#C9DEE8] border-y border-[#C9DEE8]">
+            <div className="mt-6 overflow-hidden rounded-[20px] border border-[#102C3A]/15 bg-white/80 px-5 divide-y divide-[#C9DEE8]">
               {result.modules.map((module) => (
                 <details className="group py-5" key={module.id}>
                   <summary className="flex cursor-pointer list-none items-center justify-between gap-4 outline-none">
@@ -402,8 +402,8 @@ export default function EvaluationWorkspace({ snapshot }: { snapshot: MarketData
           </div>
         </div>
 
-        <aside className="lg:col-span-4 lg:-mt-32 lg:self-start" aria-label="当前评估结果">
-          <div className={`border-t-2 bg-white p-5 shadow-[0_8px_24px_rgba(16,44,58,0.08)] lg:sticky lg:top-6 ${result.hardStatus === "fail" ? "border-t-[#B44D5C]" : result.hardStatus === "pass" ? "border-t-[#237A65]" : "border-t-[#647985]"}`}>
+        <aside className="lg:col-span-4 lg:-mt-24 lg:self-start" aria-label="当前评估结果">
+          <div className={`rounded-[20px] border bg-white/95 p-5 shadow-[0_24px_60px_-28px_rgba(20,30,80,0.32)] backdrop-blur-sm lg:sticky lg:top-24 ${result.hardStatus === "fail" ? "border-[#B44D5C]/55" : result.hardStatus === "pass" ? "border-[#237A65]/45" : "border-[#102C3A]/15"}`}>
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-[12px] leading-[18px] text-[#718C98]">当前结论</p>
@@ -500,7 +500,7 @@ export default function EvaluationWorkspace({ snapshot }: { snapshot: MarketData
               <p className="mt-1">风险预算 ¥{formatMoney(result.allowedRisk)} · 基准 {snapshot.benchmark}</p>
             </div>
 
-            <details className="group border-b border-[#E7D29B] bg-[#FFF8E8] px-3 py-3">
+            <details className="group rounded-[16px] border border-[#E7D29B] bg-[#FFF8E8] px-3 py-3">
               <summary className="flex cursor-pointer list-none items-center justify-between text-[13px] font-semibold text-[#9A6B18]">
                 次日取消条件
                 <span aria-hidden="true" className="transition-transform group-open:rotate-45">＋</span>
@@ -510,7 +510,7 @@ export default function EvaluationWorkspace({ snapshot }: { snapshot: MarketData
               </ul>
             </details>
 
-            <details className="group mt-3 border-y border-[#E3EFF4] px-1 py-3">
+            <details className="group mt-3 rounded-[16px] border border-[#E3EFF4] bg-[#F7F8F6] px-3 py-3">
               <summary className="flex cursor-pointer list-none items-center justify-between text-[12px] font-semibold text-[#476775]">
                 模型0.4参数依据
                 <span aria-hidden="true" className="transition-transform group-open:rotate-45">＋</span>

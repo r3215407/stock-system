@@ -39,9 +39,9 @@ export default async function EvaluatePage({ searchParams }: EvaluatePageProps) 
   }
 
   return (
-    <main className="min-h-screen bg-[#F8FBFD] text-[#102C3A]">
-      <header className="border-b border-[#E3EFF4] bg-white">
-        <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between px-4 sm:px-5 lg:px-8">
+    <main className="min-h-screen text-[#102C3A]">
+      <header className="fixed inset-x-4 top-4 z-50 mx-auto h-14 max-w-[720px] rounded-full border border-[#102C3A]/15 bg-[#F7F8F6]/80 shadow-[0_8px_30px_-12px_rgba(20,30,80,0.18)] backdrop-blur-xl">
+        <div className="mx-auto flex h-full w-full items-center justify-between px-4 sm:px-5">
           <BrandLogo />
           <nav aria-label="评分页导航" className="flex items-center gap-2 text-[13px] font-medium text-[#476775]">
             <span className="hidden px-3 sm:inline">模型 {modelVersion}</span>
@@ -49,12 +49,12 @@ export default async function EvaluatePage({ searchParams }: EvaluatePageProps) 
         </div>
       </header>
 
-      <div className="mx-auto w-full max-w-7xl px-4 pb-20 pt-12 sm:px-5 lg:px-8 lg:pt-16">
+      <div className="mx-auto w-full max-w-7xl px-4 pb-24 pt-36 sm:px-5 lg:px-8 lg:pt-40">
         <div className="flex flex-col justify-between gap-8 lg:flex-row lg:items-end">
-          <div className="max-w-[560px]">
-            <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-[#718C98]">Evaluation workspace</p>
-            <h1 className="mt-3 text-[32px] font-[650] leading-10 tracking-[-0.02em] sm:text-[40px] sm:leading-[48px]">
-              趋势回调转强评分
+          <div className="max-w-[720px]">
+            <p className="inline-flex rounded-full border border-[#102C3A]/15 bg-white/60 px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.12em] text-[#718C98]">Evaluation workspace</p>
+            <h1 className="mt-6 text-[38px] font-[600] leading-[1.02] tracking-[-0.045em] min-[360px]:text-[40px] sm:text-[54px] lg:text-[60px]">
+              趋势回调<em className="block text-[#5661D9] sm:inline">转强评分</em>
             </h1>
             <p className="mt-4 max-w-[520px] text-sm leading-6 text-[#476775]">
               技术指标占90分，市场环境自动计算10分；风险与执行作为硬性过滤，不能被高分覆盖。
@@ -65,7 +65,7 @@ export default async function EvaluatePage({ searchParams }: EvaluatePageProps) 
           </p>
         </div>
 
-        <div className="mt-10 border-y border-[#C9DEE8] py-6">
+        <div className="mt-12 rounded-[20px] border border-[#102C3A]/15 bg-white/70 p-4 sm:p-6">
           <EvaluationSearch defaultValue={symbol.raw} error={error} compact />
         </div>
 

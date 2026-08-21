@@ -15,20 +15,42 @@
 
 html {
   min-width: 320px;
-  background: #f8fbfd;
+  background: #f7f8f6;
   scroll-behavior: smooth;
 }
 
 body {
   margin: 0;
-  background: #f8fbfd;
+  background:
+    radial-gradient(1100px 560px at 8% -8%, rgba(86, 97, 217, 0.12), transparent 60%),
+    radial-gradient(900px 520px at 92% 5%, rgba(105, 210, 231, 0.18), transparent 56%),
+    #f7f8f6;
   color: #102c3a;
-  font-family: Inter, "SF Pro Display", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-family: Geist, Inter, "SF Pro Display", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: rgba(86, 97, 217, 0.18);
+  color: #102c3a;
 }
 
 button,
 input {
   font: inherit;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

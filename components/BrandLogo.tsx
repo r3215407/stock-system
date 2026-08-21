@@ -5,12 +5,12 @@ export default function BrandLogo({ className = "" }: { className?: string }) {
   return (
     <Link
       aria-label="Glacier Signal 首页"
-      className={`inline-flex min-h-11 items-center gap-3 rounded-[6px] text-[#102C3A] outline-none focus-visible:ring-2 focus-visible:ring-[#69D2E7] focus-visible:ring-offset-2 focus-visible:ring-offset-[#F8FBFD] ${className}`}
+      className={`inline-flex min-h-10 items-center gap-2.5 rounded-full text-[#102C3A] outline-none focus-visible:ring-2 focus-visible:ring-[#5661D9] focus-visible:ring-offset-2 ${className}`}
       href="/"
     >
       <span
         aria-hidden="true"
-        className="relative size-8 shrink-0 overflow-hidden rounded-[6px] border border-[#A7C8D7] bg-white shadow-[0_1px_2px_rgba(16,44,58,0.05)]"
+        className="relative size-8 shrink-0 overflow-hidden rounded-full border border-[#102C3A]/15 bg-white"
       >
         <Image
           alt=""
