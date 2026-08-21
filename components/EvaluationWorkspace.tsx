@@ -256,14 +256,10 @@ export default function EvaluationWorkspace({ snapshot }: { snapshot: MarketData
   }
 
   return (
-    <div className="mt-14">
+    <div className="mt-10">
       <div className="grid gap-12 lg:grid-cols-12 lg:gap-8">
         <div className="lg:col-span-8">
-          <div className="rounded-[16px] border border-[#102C3A]/12 bg-white/60 px-4 py-3 text-[13px] leading-5 text-[#476775] sm:px-5">
-            行情来源：{snapshot.provider} · 拉取时间 {new Date(snapshot.fetchedAt).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai", hour12: false })} · {snapshot.adjustment}日线。数据仅用于模型评估，请与交易所或券商行情复核。
-          </div>
-
-          <section className="mt-5 rounded-[20px] border border-[#102C3A]/15 bg-white/80 p-5 sm:p-7" aria-labelledby="stock-summary-title">
+          <section className="rounded-[20px] border border-[#102C3A]/15 bg-white/80 p-5 sm:p-7" aria-labelledby="stock-summary-title">
         <div className="flex flex-col justify-between gap-6 md:flex-row md:items-end">
           <div>
             <p className="text-[12px] leading-[18px] text-[#718C98]">{snapshot.instrumentType}摘要 · {snapshot.stage}</p>
@@ -402,7 +398,7 @@ export default function EvaluationWorkspace({ snapshot }: { snapshot: MarketData
           </div>
         </div>
 
-        <aside className="lg:col-span-4 lg:-mt-24 lg:self-start" aria-label="当前评估结果">
+        <aside className="lg:col-span-4 lg:self-start" aria-label="当前评估结果">
           <div className={`rounded-[20px] border bg-white/95 p-5 shadow-[0_24px_60px_-28px_rgba(20,30,80,0.32)] backdrop-blur-sm lg:sticky lg:top-24 ${result.hardStatus === "fail" ? "border-[#B44D5C]/55" : result.hardStatus === "pass" ? "border-[#237A65]/45" : "border-[#102C3A]/15"}`}>
             <div className="flex items-start justify-between gap-4">
               <div>

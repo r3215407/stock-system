@@ -49,7 +49,7 @@ export default async function EvaluatePage({ searchParams }: EvaluatePageProps) 
         </div>
       </header>
 
-      <div className="mx-auto w-full max-w-7xl px-4 pb-24 pt-36 sm:px-5 lg:px-8 lg:pt-40">
+      <div className="mx-auto w-full max-w-7xl px-4 pb-24 pt-32 sm:px-5 lg:px-8 lg:pt-32">
         <div className="flex flex-col justify-between gap-8 lg:flex-row lg:items-end">
           <div className="max-w-[720px]">
             <p className="inline-flex rounded-full border border-[#102C3A]/15 bg-white/60 px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.12em] text-[#718C98]">Evaluation workspace</p>
@@ -65,7 +65,7 @@ export default async function EvaluatePage({ searchParams }: EvaluatePageProps) 
           </p>
         </div>
 
-        <div className="mt-12 rounded-[20px] border border-[#102C3A]/15 bg-white/70 p-4 sm:p-6">
+        <div className="mt-10 rounded-[20px] border border-[#102C3A]/15 bg-white/70 p-4 sm:p-6">
           <EvaluationSearch defaultValue={symbol.raw} error={error} compact />
         </div>
 
