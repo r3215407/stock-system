@@ -1,6 +1,13 @@
 import "server-only";
 
-import type { AutomaticFilter, MarketDataSnapshot, ScoreModule } from "@/lib/evaluation";
+import {
+  getMa20DistanceScore,
+  getMa60RelationshipScore,
+  getPullbackAmplitudeScore,
+  type AutomaticFilter,
+  type MarketDataSnapshot,
+  type ScoreModule,
+} from "@/lib/evaluation";
 
 type DailyBar = {
   date: string;
@@ -133,6 +140,15 @@ function macdHistogram(bars: DailyBar[]) {
   return dif.map((value, index) => value - dea[index]);
 }
 
+function atr14(bars: DailyBar[]) {
+  const ranges = bars.slice(-14).map((bar, index, recentBars) => {
+    const absoluteIndex = bars.length - recentBars.length + index;
+    const previousClose = absoluteIndex > 0 ? bars[absoluteIndex - 1].close : bar.close;
+    return Math.max(bar.high - bar.low, Math.abs(bar.high - previousClose), Math.abs(bar.low - previousClose));
+  });
+  return ranges.reduce((sum, value) => sum + value, 0) / ranges.length;
+}
+
 function percent(value: number) {
   return `${value >= 0 ? "+" : ""}${(value * 100).toFixed(2)}%`;
 }
@@ -182,22 +198,29 @@ function buildAutomaticEvaluation(bars: DailyBar[]) {
   const pullbackBars = bars.slice(lastIndex - 9, lastIndex + 1);
   const priorHigh = Math.max(...bars.slice(lastIndex - 9, lastIndex).map((bar) => bar.close));
   const pullbackLow = Math.min(...pullbackBars.map((bar) => bar.close));
-  const pullbackAmplitude = priorHigh / pullbackLow - 1;
+  const pullbackLowestPrice = Math.min(...pullbackBars.map((bar) => bar.low));
+  const pullbackAmplitude = 1 - pullbackLow / priorHigh;
   const lowOffset = pullbackBars.findIndex((bar) => bar.close === pullbackLow);
   const lowIndex = lastIndex - 9 + lowOffset;
   const lowMa20 = ma20[lowIndex] as number;
   const lowDistanceToMa20 = Math.abs(pullbackLow / lowMa20 - 1);
-  const pullbackAboveMa60 = pullbackBars.every((bar, offset) => {
+  const minimumCloseToMa60 = Math.min(...pullbackBars.map((bar, offset) => {
     const value = ma60[lastIndex - 9 + offset];
-    return value !== null && bar.close >= value;
-  });
-  const pullbackConditions = [
-    { passed: longestWeakRun >= 2, points: 6 },
-    { passed: pullbackAmplitude >= 0.02 && pullbackAmplitude <= 0.08, points: 7 },
-    { passed: lowDistanceToMa20 <= 0.03, points: 6 },
-    { passed: pullbackAboveMa60, points: 6 },
+    return value === null ? Number.NEGATIVE_INFINITY : bar.close / value;
+  }));
+  const pullbackPoints = [
+    longestWeakRun >= 2 ? 6 : 0,
+    getPullbackAmplitudeScore(pullbackAmplitude),
+    getMa20DistanceScore(lowDistanceToMa20),
+    getMa60RelationshipScore(minimumCloseToMa60),
   ];
-  const pullbackScore = scoreConditions(pullbackConditions);
+  const pullbackMaximums = [6, 7, 6, 6];
+  const pullbackScore = {
+    earned: pullbackPoints.reduce((sum, points) => sum + points, 0),
+    passed: pullbackPoints.filter((points, index) => points === pullbackMaximums[index]).length,
+    failed: pullbackPoints.filter((points) => points === 0).length,
+    partial: pullbackPoints.filter((points, index) => points > 0 && points < pullbackMaximums[index]).length,
+  };
 
   const priorThreeHigh = Math.max(...bars.slice(lastIndex - 3, lastIndex).map((bar) => bar.close));
   const crossedMa5 = current.close > currentMa5 && [1, 2, 3].some((offset) => {
@@ -218,34 +241,30 @@ function buildAutomaticEvaluation(bars: DailyBar[]) {
   ];
   const strengthScore = scoreConditions(strengthConditions);
 
-  const recentTrendSafe = bars.slice(lastIndex - 9, lastIndex + 1).every((bar, offset) => {
-    const value = ma60[lastIndex - 9 + offset];
-    return value !== null && bar.close >= value * 0.98;
-  });
   const automaticFilters: AutomaticFilter[] = [
     {
-      id: "HF-A06",
+      id: "HF-02",
       label: "收盘价高于MA60",
       detail: `收盘 ¥${current.close.toFixed(2)} / MA60 ¥${currentMa60.toFixed(2)}`,
       status: current.close > currentMa60 ? "pass" : "fail",
     },
     {
-      id: "HF-A07",
+      id: "HF-03",
       label: "MA20高于MA60",
       detail: `MA20 ¥${currentMa20.toFixed(2)} / MA60 ¥${currentMa60.toFixed(2)}`,
       status: currentMa20 > currentMa60 ? "pass" : "fail",
     },
     {
-      id: "HF-A08",
+      id: "HF-04",
       label: "MA20最近5日向上",
       detail: `五日变化 ${percent(ma20Slope)}`,
       status: currentMa20 > ma20FiveDaysAgo ? "pass" : "fail",
     },
     {
-      id: "HF-A09",
-      label: "近10日未明显跌破MA60",
-      detail: "允许的最大下穿幅度为2%",
-      status: recentTrendSafe ? "pass" : "fail",
+      id: "HF-05",
+      label: "重新转强触发",
+      detail: crossedMa5 || brokeThreeDayHigh ? "已重新站上MA5或突破前三日最高收盘" : "等待重新站上MA5或突破前三日最高收盘",
+      status: crossedMa5 || brokeThreeDayHigh ? "pass" : "fail",
     },
   ];
 
@@ -276,10 +295,10 @@ function buildAutomaticEvaluation(bars: DailyBar[]) {
       pending: 0,
       reason: `最长回落或横盘 ${longestWeakRun} 日；回调幅度 ${percent(pullbackAmplitude)}；低点距MA20 ${percent(lowDistanceToMa20)}。`,
       details: [
-        { label: "最长回落或横盘", value: `${longestWeakRun}日`, status: pullbackConditions[0].passed ? "pass" : "fail" },
-        { label: "回调幅度", value: percent(pullbackAmplitude), status: pullbackConditions[1].passed ? "pass" : "fail" },
-        { label: "低点距MA20", value: percent(lowDistanceToMa20), status: pullbackConditions[2].passed ? "pass" : "fail" },
-        { label: "回调保持在MA60上方", value: pullbackAboveMa60 ? "是" : "否", status: pullbackConditions[3].passed ? "pass" : "fail" },
+        { label: "最长回落或横盘", value: `${longestWeakRun}日`, status: pullbackPoints[0] === 6 ? "pass" : "fail", points: pullbackPoints[0], maximumPoints: 6 },
+        { label: "回调幅度", value: percent(pullbackAmplitude), status: pullbackPoints[1] === 7 ? "pass" : pullbackPoints[1] > 0 ? "partial" : "fail", points: pullbackPoints[1], maximumPoints: 7 },
+        { label: "低点距MA20", value: percent(lowDistanceToMa20), status: pullbackPoints[2] === 6 ? "pass" : pullbackPoints[2] > 0 ? "partial" : "fail", points: pullbackPoints[2], maximumPoints: 6 },
+        { label: "回调与MA60关系", value: `最深收盘为MA60的 ${(minimumCloseToMa60 * 100).toFixed(2)}%`, status: pullbackPoints[3] === 6 ? "pass" : pullbackPoints[3] > 0 ? "partial" : "fail", points: pullbackPoints[3], maximumPoints: 6 },
       ],
       source: "自动",
     },
@@ -308,6 +327,8 @@ function buildAutomaticEvaluation(bars: DailyBar[]) {
     crossedMa5,
     brokeThreeDayHigh,
     pullbackLow,
+    pullbackLowestPrice,
+    atr: atr14(bars),
   };
 }
 
@@ -364,7 +385,7 @@ async function fetchEastmoneyBars(normalizedSymbol: string) {
     klt: "101",
     fqt: "1",
     end: "20500101",
-    lmt: "140",
+    lmt: "320",
   });
   const response = await fetch(`https://push2his.eastmoney.com/api/qt/stock/kline/get?${params}`, {
     cache: "no-store",
@@ -391,7 +412,7 @@ async function fetchEastmoneyBars(normalizedSymbol: string) {
 
 async function fetchTencentBars(normalizedSymbol: string) {
   const securityId = tencentSecurityId(normalizedSymbol);
-  const params = new URLSearchParams({ param: `${securityId},day,,,160,qfq` });
+  const params = new URLSearchParams({ param: `${securityId},day,,,320,qfq` });
   const response = await fetch(`https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?${params}`, {
     cache: "no-store",
     headers: {
@@ -449,26 +470,26 @@ function cleanBars(rawBars: DailyBar[]) {
 export async function getMarketDataSnapshot(normalizedSymbol: string, signalDate?: string): Promise<MarketDataSnapshot> {
   const { name, bars: rawBars, provider } = await fetchMarketBars(normalizedSymbol);
   const bars = cleanBars(rawBars);
-  if (bars.length < 100) {
-    throw new MarketDataError(`仅取得 ${bars.length} 个有效交易日，少于模型要求的100日。`, "INSUFFICIENT_DATA");
+  if (bars.length < 250) {
+    throw new MarketDataError(`仅取得 ${bars.length} 个有效交易日，少于模型0.4要求的250日。`, "INSUFFICIENT_DATA");
   }
 
   let signalIndex: number;
   if (signalDate) {
     signalIndex = bars.findIndex((bar) => bar.date === signalDate);
-    if (signalIndex < 99) {
-      throw new MarketDataError("指定信号日不存在，或此前不足100个有效交易日。", "INSUFFICIENT_DATA");
+    if (signalIndex < 249) {
+      throw new MarketDataError("指定信号日不存在，或此前不足250个有效交易日。", "INSUFFICIENT_DATA");
     }
   } else {
     signalIndex = bars.length - 1;
     const clock = shanghaiClock();
     if (bars[signalIndex].date === clock.date && clock.minutes < 15 * 60 + 5) signalIndex -= 1;
   }
-  if (signalIndex < 99) {
-    throw new MarketDataError("最新完整交易日前不足100个有效交易日。", "INSUFFICIENT_DATA");
+  if (signalIndex < 249) {
+    throw new MarketDataError("最新完整交易日前不足250个有效交易日。", "INSUFFICIENT_DATA");
   }
 
-  const analysisBars = bars.slice(Math.max(0, signalIndex - 139), signalIndex + 1);
+  const analysisBars = bars.slice(Math.max(0, signalIndex - 249), signalIndex + 1);
   const signalBar = bars[signalIndex];
   const nextBar = bars[signalIndex + 1] ?? null;
   const automatic = buildAutomaticEvaluation(analysisBars);
@@ -482,28 +503,43 @@ export async function getMarketDataSnapshot(normalizedSymbol: string, signalDate
       }
     : null;
   const plannedEntryPrice = nextBar?.open ?? signalBar.close;
-  const initialStopPrice = Math.round(automatic.pullbackLow * 0.99 * 100) / 100;
+  const priceFactor = plannedEntryPrice < 10 ? 1000 : 100;
+  const initialStopPrice = Math.floor((automatic.pullbackLowestPrice - 0.3 * automatic.atr) * priceFactor) / priceFactor;
   const perShareRisk = plannedEntryPrice - initialStopPrice;
   const stopDistanceRate = perShareRisk / plannedEntryPrice;
   const resistanceBars = analysisBars.slice(Math.max(0, analysisBars.length - 61), -1);
   const resistancePrice = Math.max(...resistanceBars.map((bar) => bar.close));
   const rewardRiskRatio = perShareRisk > 0 ? (resistancePrice - plannedEntryPrice) / perShareRisk : Number.NEGATIVE_INFINITY;
+  const brokeSixtyDayClosingHigh = signalBar.close > resistancePrice;
+  const resistanceFilterPassed = brokeSixtyDayClosingHigh || rewardRiskRatio >= 2;
+  const pressureDistanceRate = Math.max(0, (resistancePrice - signalBar.close) / resistancePrice);
+  const strengthScore = automatic.automaticModules.find((module) => module.id === "strength")?.earned ?? 0;
+  const criticalBreakout = !brokeSixtyDayClosingHigh && pressureDistanceRate <= 0.01 && strengthScore >= 27;
+  const pressureStatus: MarketDataSnapshot["pressureStatus"] = brokeSixtyDayClosingHigh
+    ? "breakout"
+    : resistanceFilterPassed
+      ? "sufficient"
+      : criticalBreakout
+        ? "critical"
+        : "insufficient";
 
   automatic.automaticFilters.push(
     {
-      id: "HF-A10",
+      id: "HF-06",
       label: "结构止损距离有效",
       detail: `入场 ¥${plannedEntryPrice.toFixed(2)} / 止损 ¥${initialStopPrice.toFixed(2)} / 距离 ${percent(stopDistanceRate)}`,
-      status: perShareRisk > 0 && stopDistanceRate <= 0.08 ? "pass" : "fail",
+      status: perShareRisk > 0 && stopDistanceRate <= 0.12 ? "pass" : "fail",
     },
     {
-      id: "HF-A11",
-      label: "前期压力空间不少于2R",
-      detail: `60日最高收盘 ¥${resistancePrice.toFixed(2)} / 可用空间 ${Number.isFinite(rewardRiskRatio) ? rewardRiskRatio.toFixed(2) : "—"}R`,
-      status: rewardRiskRatio >= 2 ? "pass" : "fail",
+      id: "HF-07",
+      label: "压力空间或60日突破有效",
+      detail: brokeSixtyDayClosingHigh
+        ? `信号日收盘 ¥${signalBar.close.toFixed(2)} 已突破此前60日最高收盘 ¥${resistancePrice.toFixed(2)}，按上方无明确技术阻力处理`
+        : `此前60日最高收盘 ¥${resistancePrice.toFixed(2)} / 可用空间 ${Number.isFinite(rewardRiskRatio) ? rewardRiskRatio.toFixed(2) : "—"}R（要求不少于2R）`,
+      status: resistanceFilterPassed ? "pass" : criticalBreakout ? "pending" : "fail",
     },
     {
-      id: "HF-A12",
+      id: "HF-08",
       label: "T+1高开不超过2%",
       detail: nextBar && gapRate !== null ? `${nextBar.date} 高开 ${percent(gapRate)}` : "等待下一交易日开盘确认",
       status: t1Open ? t1Open.status : "pending",
@@ -537,6 +573,11 @@ export async function getMarketDataSnapshot(normalizedSymbol: string, signalDate
     plannedEntryPrice,
     initialStopPrice,
     resistancePrice,
+    stopAlgorithm: `最近10日最低价 ¥${automatic.pullbackLowestPrice.toFixed(plannedEntryPrice < 10 ? 3 : 2)} − 0.3 × ATR14（${automatic.atr.toFixed(plannedEntryPrice < 10 ? 3 : 2)}）`,
+    stopDistanceRate,
+    pressureStatus,
+    pressureDistanceRate,
+    rewardRiskRatio: Number.isFinite(rewardRiskRatio) ? rewardRiskRatio : null,
     entryTriggerPassed: automatic.crossedMa5 || automatic.brokeThreeDayHigh,
     automaticFilters: automatic.automaticFilters,
     automaticModules: [...automatic.automaticModules, marketModule],

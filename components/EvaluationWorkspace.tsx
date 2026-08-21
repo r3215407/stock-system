@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import {
   formatMoney,
   getScorePositionRule,
+  getStopDistanceRiskAdjustment,
   minimumStrengthScore,
   minimumTechnicalScore,
   modelVersion,
@@ -28,7 +29,8 @@ const initialAccountEquity = 100000;
 
 const cancellationConditions = [
   "高开超过2%",
-  "实际入场后止损距离超过8%",
+  "实际入场后止损距离超过12%",
+  "止损距离为10%至12%但总分不足80分",
   "出现新的事件风险",
   "组合风险额度不足",
   "无法正常成交",
@@ -159,20 +161,26 @@ export default function EvaluationWorkspace({ snapshot }: { snapshot: MarketData
     const triggerGatePassed = snapshot.entryTriggerPassed;
     const eventFail = answers.event === "exists";
     const emotionFail = answers.emotion === "chasing";
-    const automaticFail = snapshot.automaticFilters.some((filter) => filter.status === "fail");
+    const triggerFilterFailed = snapshot.automaticFilters.some((filter) => filter.id === "HF-05" && filter.status === "fail");
+    const automaticFail = snapshot.automaticFilters.some((filter) => filter.status === "fail" && filter.id !== "HF-05");
     const automaticPending = snapshot.automaticFilters.some((filter) => filter.status === "pending");
     const userPending = !answers.event || answers.event === "uncertain" || !answers.emotion || answers.emotion === "uncertain";
     const hardStatus: EvaluationStatus = eventFail || emotionFail || automaticFail
       ? "fail"
-      : userPending || automaticPending
+      : userPending || automaticPending || triggerFilterFailed
         ? "pending"
         : "pass";
     const positionRule = getScorePositionRule(earned);
+    const stopRiskAdjustment = getStopDistanceRiskAdjustment(snapshot.stopDistanceRate, earned);
     const signalGatePassed = technicalGatePassed && strengthGatePassed && triggerGatePassed;
-    const candidateAvailable = !eventFail && !emotionFail && !automaticFail && !userPending && Boolean(positionRule) && signalGatePassed;
+    const criticalBreakout = snapshot.pressureStatus === "critical" && earned >= 70 && technicalGatePassed && strengthScore >= 27;
+    const candidateAvailable = !eventFail && !emotionFail && !automaticFail && !userPending && Boolean(positionRule) && signalGatePassed && stopRiskAdjustment.executable && !criticalBreakout;
     const perShareRisk = snapshot.plannedEntryPrice - snapshot.initialStopPrice;
     const scoreRiskBudget = candidateAvailable && positionRule
-      ? accountEquity * positionRule.riskBudgetRate * (threeConsecutiveStops ? 0.5 : 1)
+      ? accountEquity * positionRule.riskBudgetRate * stopRiskAdjustment.factor * (threeConsecutiveStops ? 0.5 : 1)
+      : 0;
+    const finalRiskRate = positionRule
+      ? positionRule.riskBudgetRate * stopRiskAdjustment.factor * (threeConsecutiveStops ? 0.5 : 1)
       : 0;
     const availablePortfolioRisk = Math.max(0, accountEquity * 0.02 - currentOpenRisk);
     const allowedRisk = Math.min(scoreRiskBudget, availablePortfolioRisk) * (1 - riskBufferRate);
@@ -188,25 +196,33 @@ export default function EvaluationWorkspace({ snapshot }: { snapshot: MarketData
     const capacityPassed = shares >= 100;
     const outputsAvailable = candidateAvailable && capacityPassed;
 
-    const conclusion = hardStatus === "fail"
-      ? "不入场"
-      : userPending
-        ? "待补充"
-        : earned < 70
-          ? "不交易"
-          : !technicalGatePassed
-            ? "候选观察"
-            : !strengthGatePassed || !triggerGatePassed
-              ? "等待转强"
-              : !capacityPassed
-                ? "风险额度不足"
-                : automaticPending
-                  ? "候选"
-                  : earned < 80
-                    ? "允许试仓"
-                    : earned < 90
-                      ? "标准交易"
-                      : "高匹配";
+    const conclusion = eventFail || emotionFail
+      ? "硬性失败"
+      : automaticFail
+        ? snapshot.pressureStatus === "insufficient"
+          ? "压力空间不足"
+          : "硬性失败"
+        : userPending
+          ? "待补充"
+          : earned < 70
+            ? "不交易"
+            : !technicalGatePassed
+              ? "候选观察"
+              : criticalBreakout
+                ? "临界突破观察"
+                : !strengthGatePassed || !triggerGatePassed || triggerFilterFailed
+                  ? "等待转强"
+                  : !stopRiskAdjustment.executable
+                    ? "止损档位不执行"
+                    : !capacityPassed
+                      ? "风险额度不足"
+                      : automaticPending
+                        ? "候选"
+                        : earned < 80
+                          ? "允许试仓"
+                          : earned < 90
+                            ? "标准交易"
+                            : "高匹配";
 
     return {
       modules,
@@ -216,8 +232,10 @@ export default function EvaluationWorkspace({ snapshot }: { snapshot: MarketData
       hardStatus,
       conclusion,
       positionRule,
+      stopRiskAdjustment,
+      finalRiskRate,
       allocationRate,
-      stopPrice: outputsAvailable ? snapshot.initialStopPrice : null,
+      stopPrice: snapshot.initialStopPrice,
       outputsAvailable,
       technicalScore,
       strengthScore,
@@ -229,6 +247,7 @@ export default function EvaluationWorkspace({ snapshot }: { snapshot: MarketData
       shares,
       plannedLoss,
       perShareRisk,
+      criticalBreakout,
     };
   }, [answers, accountEquity, currentIndustryValue, currentOpenRisk, currentStockValue, snapshot, threeConsecutiveStops]);
 
@@ -344,6 +363,7 @@ export default function EvaluationWorkspace({ snapshot }: { snapshot: MarketData
                       <h3 className="text-sm font-semibold text-[#102C3A]">{module.label}</h3>
                       <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] leading-[18px]">
                         <span className="font-medium text-[#237A65] tabular-nums">✓ 通过 {module.passed}</span>
+                        {module.partial ? <span className="font-medium text-[#9A6B18] tabular-nums">◐ 部分得分 {module.partial}</span> : null}
                         <span className="font-medium text-[#B44D5C] tabular-nums">× 不通过 {module.failed}</span>
                         <span className="text-[#647985] tabular-nums">? 未知 {module.pending}</span>
                         <span className="text-[#718C98]">· {module.source}</span>
@@ -358,13 +378,16 @@ export default function EvaluationWorkspace({ snapshot }: { snapshot: MarketData
                     {module.details?.length ? (
                       <div className="flex flex-wrap gap-x-4 gap-y-2">
                         {module.details.map((detail) => (
-                          <span className="whitespace-nowrap" key={detail.label}>
+                          <span className="min-w-0 sm:whitespace-nowrap" key={detail.label}>
                             <span className="text-[#476775]">{detail.label} </span>
                             <strong
-                              className={`font-semibold tabular-nums ${detail.status === "pass" ? "text-[#237A65]" : detail.status === "fail" ? "text-[#B44D5C]" : "text-[#647985]"}`}
+                              className={`font-semibold tabular-nums ${detail.status === "pass" ? "text-[#237A65]" : detail.status === "partial" ? "text-[#9A6B18]" : detail.status === "fail" ? "text-[#B44D5C]" : "text-[#647985]"}`}
                             >
                               {detail.value}
                             </strong>
+                            {detail.points !== undefined && detail.maximumPoints !== undefined ? (
+                              <span className="ml-1 text-[#718C98] tabular-nums">{detail.points}/{detail.maximumPoints}分</span>
+                            ) : null}
                           </span>
                         ))}
                       </div>
@@ -420,6 +443,27 @@ export default function EvaluationWorkspace({ snapshot }: { snapshot: MarketData
               <p className="mt-2 text-[11px] leading-[17px] text-[#718C98]">账户数据只参与当前浏览器内的即时计算，不会上传或保存。</p>
             </div>
 
+            <div className="border-b border-[#E3EFF4] py-4 text-[12px] leading-[18px] text-[#476775]">
+              <div className="flex items-center justify-between gap-4">
+                <span>止损距离档位</span>
+                <strong className={result.stopRiskAdjustment.executable ? "text-[#237A65]" : "text-[#B44D5C]"}>
+                  {(snapshot.stopDistanceRate * 100).toFixed(2)}% · {result.stopRiskAdjustment.label}
+                </strong>
+              </div>
+              <div className="mt-2 flex items-center justify-between gap-4">
+                <span>止损风险系数</span>
+                <strong className="text-[#102C3A] tabular-nums">{(result.stopRiskAdjustment.factor * 100).toFixed(0)}%</strong>
+              </div>
+              <div className="mt-2 flex items-center justify-between gap-4">
+                <span>最终单笔风险比例</span>
+                <strong className="text-[#102C3A] tabular-nums">{(result.finalRiskRate * 100).toFixed(3)}%</strong>
+              </div>
+              <p className="mt-3 text-[#718C98]">止损算法：{snapshot.stopAlgorithm}</p>
+              <p className="mt-1 text-[#718C98]">
+                压力状态：{snapshot.pressureStatus === "breakout" ? "已突破此前60日最高收盘" : snapshot.pressureStatus === "sufficient" ? "潜在空间不少于2R" : snapshot.pressureStatus === "critical" ? `距60日高点 ${(snapshot.pressureDistanceRate * 100).toFixed(2)}%，临界突破观察` : "潜在空间不足2R"}
+              </p>
+            </div>
+
             <dl className="grid grid-cols-2 gap-5 py-4">
               <div>
                 <dt className="text-[12px] text-[#718C98]">计划买入股数</dt>
@@ -448,7 +492,7 @@ export default function EvaluationWorkspace({ snapshot }: { snapshot: MarketData
             </dl>
 
             <p className="mb-5 text-[11px] leading-[17px] text-[#718C98]">
-              70–79分风险0.25%；80–89分风险0.50%；90分以上风险0.75%。已预留10%风险缓冲，单股市值封顶15%。
+              基础风险为0.25% / 0.50% / 0.75%，再乘止损距离系数；8%以内100%，8%–10%为50%，10%–12%为25%且总分至少80。已预留10%风险缓冲。
             </p>
 
             <div className="mb-5 border-y border-[#E3EFF4] py-3 text-[12px] leading-[18px] text-[#476775]">
@@ -463,6 +507,21 @@ export default function EvaluationWorkspace({ snapshot }: { snapshot: MarketData
               </summary>
               <ul className="mt-2 space-y-1.5 text-[12px] leading-[18px] text-[#76591F]">
                 {cancellationConditions.map((condition) => <li key={condition}>— {condition}</li>)}
+              </ul>
+            </details>
+
+            <details className="group mt-3 border-y border-[#E3EFF4] px-1 py-3">
+              <summary className="flex cursor-pointer list-none items-center justify-between text-[12px] font-semibold text-[#476775]">
+                模型0.4参数依据
+                <span aria-hidden="true" className="transition-transform group-open:rotate-45">＋</span>
+              </summary>
+              <ul className="mt-3 space-y-1.5 text-[11px] leading-[17px] text-[#718C98]">
+                <li>— 总分≥70，技术分≥65/90，重新转强≥21/35</li>
+                <li>— 回调幅度按3%–6%、2%–3% / 6%–8%、8%–10%分档</li>
+                <li>— MA20距离3%以内满分，3%–5%部分得分</li>
+                <li>— 回调收盘低于MA60不超过2%仍可部分得分，不重复硬否决</li>
+                <li>— 止损距离超过12%不执行；10%–12%要求总分≥80</li>
+                <li>— 尚未突破60日高点时要求至少2R空间</li>
               </ul>
             </details>
 
