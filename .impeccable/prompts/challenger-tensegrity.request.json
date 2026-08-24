@@ -1,0 +1,8 @@
+{
+  "model": "gpt-image-2",
+  "prompt": "Use case: ui-mockup\nAsset type: high-fidelity desktop web app direction comp, 1536x1024 landscape\nPrimary request: Design Glacier Signal's Chinese A-share evaluation workbench as an engineering tensegrity force diagram where score, stop, account risk, and position are visibly constrained by one another. This is an operating UI, not sculpture photography.\nStructure: compact navigation; left stock identity and verdict 等待转强 / 71; center a precise semantic constraint network connecting hard filters, technical score 65/90, strength 18/35, stop ¥1,198.00, and account risk; right conclusion and position controls; detailed modules begin below. Verdict remains more prominent than the diagram.\nStyle/medium: pale concrete drawing ground, carbon-black struts, red tension cords, ash-gray slack members, engineering leader lines and narrow technical type.\nPalette: #0D0D0F, #E7E5E1, #D62828, #9A9A9A, #F2F1ED.\nExact text: \"Glacier Signal\", \"贵州茅台\", \"600519.SH\", \"等待转强\", \"候选评分 71 / 100\", \"硬性过滤\", \"技术评分\", \"风险预算\", \"结构止损 ¥1,198.00\".\nConstraints: no dark cinematic hero, no 3D sculpture photo, no generic dashboard, no invented claims, no device mockup, no watermark; keep every essential value legible.\n",
+  "size": "1536x1024",
+  "quality": "high",
+  "output_format": "png",
+  "n": 1
+}

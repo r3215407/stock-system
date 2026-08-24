@@ -1,14 +1,60 @@
+import ticketStyles from "@/app/evaluate/evaluate.module.css";
+
 type EvaluationSearchProps = {
   defaultValue?: string;
   error?: string;
   compact?: boolean;
+  variant?: "default" | "ticket";
 };
 
 export default function EvaluationSearch({
   defaultValue = "",
   error,
   compact = false,
+  variant = "default",
 }: EvaluationSearchProps) {
+  if (variant === "ticket") {
+    return (
+      <form action="/evaluate" className={ticketStyles.searchTicket} method="get">
+        <div className={ticketStyles.searchField}>
+          <label className={ticketStyles.searchLabel} htmlFor="evaluation-symbol">
+            A股 / 场内基金代码
+          </label>
+          <div className={ticketStyles.searchInputRow}>
+            <input
+              aria-describedby={error ? "evaluation-symbol-error" : "evaluation-symbol-help"}
+              aria-invalid={Boolean(error)}
+              autoComplete="off"
+              className={ticketStyles.searchInput}
+              defaultValue={defaultValue}
+              id="evaluation-symbol"
+              inputMode="numeric"
+              maxLength={6}
+              minLength={6}
+              name="symbol"
+              pattern="[0-9]{6}"
+              placeholder="例如 600519"
+              required
+              type="text"
+            />
+          </div>
+        </div>
+        <button className={ticketStyles.searchButton} type="submit">
+          签发评估票
+        </button>
+        {error ? (
+          <p className={ticketStyles.searchError} id="evaluation-symbol-error">
+            {error}
+          </p>
+        ) : (
+          <p className={ticketStyles.searchHelp} id="evaluation-symbol-help">
+            支持六位A股及场内ETF、LOF代码，例如 600519、159915、510300。
+          </p>
+        )}
+      </form>
+    );
+  }
+
   return (
     <form action="/evaluate" className={compact ? "w-full max-w-[680px]" : "w-full max-w-[760px]"} method="get">
       <label className="block text-[13px] font-[550] leading-[18px] text-[#102C3A]" htmlFor="evaluation-symbol">

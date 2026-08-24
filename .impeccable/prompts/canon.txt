@@ -1,0 +1,8 @@
+Use case: ui-mockup
+Asset type: high-fidelity desktop web app direction comp, 1536x1024 landscape
+Primary request: Design the category-standard version of Glacier Signal's Chinese A-share stock evaluation dashboard at exceptional craft quality.
+Structure: top navigation and stock summary; left two-thirds with hard filters and score modules; right sticky conclusion card with 等待转强, score 71/100, stop ¥1,198.00 and position inputs; lower fold visible.
+Style/medium: restrained blue-white financial product UI, fine borders, disciplined data typography, green/red statuses with symbols, highly polished spacing and hierarchy.
+Palette: #F7F9FC, #142B3A, #3B82F6, #22A06B, #D64545.
+Exact text: "Glacier Signal", "贵州茅台", "600519.SH", "等待转强", "候选评分 71 / 100", "硬性过滤", "技术评分", "风险预算", "结构止损 ¥1,198.00".
+Constraints: no marketing hero, no invented claims, no device mockup, no watermark; optimize daily work clarity.

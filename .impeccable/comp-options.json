@@ -1,0 +1,43 @@
+{
+  "title": "选择交易票证夹的页面构图",
+  "question": "视觉世界已经确定。请选择最适合日常个股评估的构图；也可以在输入框中说明希望合并的部分。",
+  "options": [
+    {
+      "id": "ticket-original",
+      "label": "主票 + 风险副联",
+      "kicker": "DIRECTION COMP",
+      "lineage": "交易票证夹 · 原始方向稿",
+      "thesis": "主票集中股票、结论和评分，右侧紫色副联承载止损，详细检查向下展开。",
+      "palette": ["#0D1B3D", "#F8F7F2", "#D7262D", "#4B2E83", "#D9D3C7"],
+      "materials": ["白色票券纸", "紫色复写层", "红色验证章"],
+      "viewport": "左侧导航后是一张大主票和一张风险副联，结论与分数在第一视线内并列。",
+      "risk": "桌面辨识度最高，但移动端需要把副联严谨地改排为纵向票根。",
+      "comp": ".impeccable/mocks/decision/challenger-ticket.png"
+    },
+    {
+      "id": "ticket-flow",
+      "label": "四段评估联票",
+      "kicker": "SEQUENCE",
+      "lineage": "交易票证夹 · 流程优先",
+      "thesis": "把摘要、过滤、评分和仓位做成连续四联票，当前位置由验证标签锁定。",
+      "palette": ["#0D1B3D", "#F8F7F2", "#D7262D", "#4B2E83", "#D9D3C7"],
+      "materials": ["连续票券", "齿孔分隔", "折叠验证标签"],
+      "viewport": "一张横跨首屏的四联主票，结论居中，详细检查从票轨下方开始。",
+      "risk": "流程最清楚，但必须防止桌面横向结构在手机上变成横向滚动。",
+      "comp": ".impeccable/mocks/ticket-flow.png"
+    },
+    {
+      "id": "ticket-verdict",
+      "label": "结论签发票",
+      "kicker": "VERDICT FIRST",
+      "lineage": "交易票证夹 · 结论优先",
+      "thesis": "用一张巨型签发票先回答能否交易，检查条和风险回执分列两侧。",
+      "palette": ["#0D1B3D", "#F8F7F2", "#D7262D", "#4B2E83", "#D9D3C7"],
+      "materials": ["签发主票", "检查票条", "风险复写回执"],
+      "viewport": "大结论票略偏左，左侧是硬性检查，右侧是账户和风险输出，评分明细在第二层。",
+      "risk": "最快得到答案，但首屏可见的评分解释会比另外两版更少。",
+      "comp": ".impeccable/mocks/ticket-verdict.png"
+    }
+  ],
+  "steer": true
+}

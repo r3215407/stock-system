@@ -117,11 +117,11 @@ export function normalizeSymbol(input: string | string[] | undefined) {
   if (!raw) return { raw: "", normalized: "", valid: false };
 
   const normalizedInput = raw.trim().toUpperCase();
-  const match = normalizedInput.match(/^(\d{6})$/);
+  const match = normalizedInput.match(/^(\d{6})(?:\.(SH|SZ|BJ))?$/);
   if (!match) return { raw: normalizedInput, normalized: "", valid: false };
 
   const code = match[1];
-  const inferredMarket = /^(?:4|8|92)/.test(code) ? "BJ" : /^[56]/.test(code) ? "SH" : "SZ";
+  const inferredMarket = match[2] ?? (/^(?:4|8|92)/.test(code) ? "BJ" : /^[56]/.test(code) ? "SH" : "SZ");
   return {
     raw: normalizedInput,
     normalized: `${code}.${inferredMarket}`,

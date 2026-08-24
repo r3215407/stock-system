@@ -14,7 +14,6 @@
 }
 
 html {
-  min-width: 320px;
   background: #f7f8f6;
   scroll-behavior: smooth;
 }
@@ -26,7 +25,7 @@ body {
     radial-gradient(900px 520px at 92% 5%, rgba(105, 210, 231, 0.18), transparent 56%),
     #f7f8f6;
   color: #102c3a;
-  font-family: Geist, Inter, "SF Pro Display", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  font-family: "Avenir Next", Avenir, "SF Pro Display", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
 }

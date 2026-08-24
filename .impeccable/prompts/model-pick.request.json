@@ -1,0 +1,8 @@
+{
+  "model": "gpt-image-2",
+  "prompt": "Use case: ui-mockup\nAsset type: high-fidelity desktop web app direction comp, 1536x1024 landscape\nPrimary request: Design Glacier Signal's Chinese A-share evaluation screen as an aircraft maintenance control-room airworthiness release certificate. It must be a real operating interface, not a poster.\nStructure: slim navigation, huge tail-number style stock identity 贵州茅台 / 600519.SH, left GO/NO-GO checklist, central flight-release verdict 等待转强 with 71/100, right payload-like risk limits with stop ¥1,198.00 and position output, then detailed technical modules beginning below.\nStyle/medium: pale aviation aluminum, navy maintenance ink, yellow inspection tag, restrained vermilion rejection stamp, rivet or punched details used sparingly, stamped sign-off fields, crisp condensed grotesk plus tabular numerals.\nPalette: #102B3A, #E9ECE7, #F0B323, #D64933, #6D858F.\nExact text: \"Glacier Signal\", \"贵州茅台\", \"600519.SH\", \"等待转强\", \"71 / 100\", \"硬性过滤\", \"技术评分\", \"结构止损 ¥1,198.00\", \"查看近两年回测\".\nConstraints: no airplane photograph, no cockpit fantasy, no generic financial cards, no neon, no fake claims, no device frame, no watermark. Clear enough for daily repetitive use.\n",
+  "size": "1536x1024",
+  "quality": "high",
+  "output_format": "png",
+  "n": 1
+}

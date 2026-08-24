@@ -1,9 +1,5 @@
-import Hero from "@/components/Hero";
+import ScreeningWorkspace from "@/components/ScreeningWorkspace";
 
 export default function HomePage() {
-  return (
-    <main>
-      <Hero />
-    </main>
-  );
+  return <ScreeningWorkspace />;
 }

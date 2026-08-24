@@ -1,0 +1,27 @@
+"use client";
+
+import styles from "@/app/operational.module.css";
+import { calculatePositionPlan, type PositionCandidateInput } from "@/lib/positions";
+import { useMemo, useState } from "react";
+
+function decodeItems(value:string):PositionCandidateInput[]{if(!value)return[];return value.split(",").flatMap((row)=>{const[code,encodedName,rank,score,entry,stop]=row.split("~");const numbers=[rank,score,entry,stop].map(Number);if(!/^\d{6}$/.test(code)||numbers.some((item)=>!Number.isFinite(item)))return[];return[{symbol:code,name:decodeURIComponent(encodedName),industry:"未分类",rank:numbers[0],score:numbers[1],entryPrice:numbers[2],initialStopPrice:numbers[3],existingStockValue:0,existingIndustryValue:0}]})}
+function currency(value:number){return new Intl.NumberFormat("zh-CN",{style:"currency",currency:"CNY",maximumFractionDigits:0}).format(value)}
+
+export default function PositionPlanner({encodedItems}:{encodedItems:string}){
+  const[accountEquity,setAccountEquity]=useState(100_000);const[currentOpenRisk,setCurrentOpenRisk]=useState(0);const[stops,setStops]=useState(false);const[items,setItems]=useState(()=>decodeItems(encodedItems));
+  const plan=useMemo(()=>calculatePositionPlan({accountEquity,currentOpenRisk,threeConsecutiveStops:stops,candidates:items}),[accountEquity,currentOpenRisk,items,stops]);
+  function move(index:number,direction:-1|1){const target=index+direction;if(target<0||target>=items.length)return;setItems((current)=>{const next=[...current];[next[index],next[target]]=[next[target],next[index]];return next})}
+  function update(index:number,field:keyof PositionCandidateInput,value:string|number){setItems((current)=>current.map((item,i)=>i===index?{...item,[field]:value}:item))}
+
+  return <main className={styles.page}><div className={styles.shell}>
+    <header className={styles.hero}><div className={styles.heroMain}><p className={styles.eyebrow}>交易前风险签发中心</p><h1 className={styles.heroTitle}>为候选排序，<br/><em>签发仓位方案</em></h1><p className={styles.heroCopy}>按当前优先级依次占用组合风险额度。调整顺序或输入后即时重算；此处只生成下单前计划，不记录真实持仓。</p></div><div className={styles.heroSide}><strong>风险先于机会</strong><p>单股 15% · 行业 30% · 组合初始风险 2% · 预算保留 10% 缓冲。</p></div></header>
+    <section className={styles.section} aria-labelledby="risk-input-title"><header className={styles.sectionHeader}><h2 id="risk-input-title">账户风险输入联</h2><p>输入仅存在当前页面内存，刷新后不恢复。</p></header><div className={styles.formStrip}><NumberInput label="账户净值" value={accountEquity} onChange={setAccountEquity}/><NumberInput label="当前未平仓初始风险" value={currentOpenRisk} onChange={setCurrentOpenRisk}/><label className={`${styles.formCell} ${styles.checkCell}`}><input checked={stops} onChange={(e)=>setStops(e.target.checked)} type="checkbox"/><span>连续3笔完整止损<br/><small>单笔风险减半</small></span></label><div className={`${styles.formCell} ${styles.ruleCell}`}>固定上限：单股 15%<br/>行业 30% · 总风险 2%<br/>风险缓冲 10%</div></div></section>
+    <dl className={styles.metricGrid}>{[["计划总市值",currency(plan.plannedValue)],["计划仓位",`${(plan.plannedValueRate*100).toFixed(2)}%`],["新增计划风险",currency(plan.addedRisk)],["剩余风险额度",currency(plan.remainingRisk)]].map(([label,value])=><div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
+    <section className={styles.section}><header className={styles.priorityHeader}><div><h2>候选优先级联票</h2><p>入场价可在 T+1 改为实际开盘价；后续标的随顺序自动重算。</p></div><strong>{items.length} 只</strong></header>
+      {!items.length?<div className={styles.positionEmpty}><h3>尚未加入候选</h3><p>请从“今日选股”勾选股票并进入仓位方案。</p><a className={styles.linkButton} href="/">返回今日选股</a></div>:<div className={styles.positionList}>{plan.items.map((item,index)=><article className={styles.positionRow} key={item.symbol}><div className={styles.positionIdentity}><div className={styles.moveButtons}><button aria-label="上移" disabled={index===0} onClick={()=>move(index,-1)}>↑</button><button aria-label="下移" disabled={index===items.length-1} onClick={()=>move(index,1)}>↓</button></div><div><p>优先级 {index+1} · 原排名 #{item.rank}</p><h3>{item.name} <small>{item.symbol}</small></h3><p>评分 {item.score} · {item.riskLabel}</p></div></div><div className={styles.positionFields}><SmallInput label="计划入场价" value={item.entryPrice} onChange={(v)=>update(index,"entryPrice",v)}/><SmallInput label="已有该股市值" value={item.existingStockValue??0} onChange={(v)=>update(index,"existingStockValue",v)}/><SmallInput label="已有行业市值" value={item.existingIndustryValue??0} onChange={(v)=>update(index,"existingIndustryValue",v)}/></div><dl className={styles.positionOutputs}><div><dt>股数 / 仓位</dt><dd>{item.shares}股<br/>{(item.allocationRate*100).toFixed(2)}%</dd></div><div><dt>计划亏损</dt><dd>{currency(item.plannedLoss)}</dd></div><div><dt>首要限制</dt><dd>{item.limitingReason}</dd></div></dl></article>)}</div>}
+    </section><p className={styles.footerNote}>股数始终向下取整至 100 股，不通过缩短止损来满足仓位。</p>
+  </div></main>;
+}
+
+function NumberInput({label,value,onChange}:{label:string;value:number;onChange:(v:number)=>void}){return <label className={styles.formCell}><span className={styles.fieldLabel}>{label}</span><span className={styles.numberLine}>¥<input min="0" onChange={(e)=>onChange(Number(e.target.value))} type="number" value={value}/></span></label>}
+function SmallInput({label,value,onChange}:{label:string;value:number;onChange:(v:number)=>void}){return <label className={styles.smallField}><span>{label}</span><input min="0" onChange={(e)=>onChange(Number(e.target.value))} step="0.01" type="number" value={value}/></label>}

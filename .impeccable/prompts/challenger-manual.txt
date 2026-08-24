@@ -1,0 +1,8 @@
+Use case: ui-mockup
+Asset type: high-fidelity desktop web app direction comp, 1536x1024 landscape
+Primary request: Design Glacier Signal's Chinese stock evaluation workbench as an open boxed-software reference manual with punched translucent overlays and colored edge tabs. It must feel like a precise task interface, not a documentation website.
+Structure: compact header; open-manual spread with stock identity 贵州茅台 600519.SH on the left, dominant yellow current-result divider reading 等待转强 and 71/100, transparent overlay for hard filters and score details, right edge tabs for 硬性过滤 / 评分明细 / 仓位方案 / 模型依据, risk output visible on the right; lower content starts in the viewport.
+Style/medium: milk acetate, warm reference-paper ground, chrome yellow active board, oxide orange, teal, ultramarine tabs, two-frame hinged visual cues, condensed sans headings and calm readable Chinese body type.
+Palette: #F3EAD9, #171817, #F6C62E, #E56B2F, #149E9B.
+Exact text: "Glacier Signal", "贵州茅台", "600519.SH", "等待转强", "71 / 100", "硬性过滤", "评分明细", "仓位方案", "模型依据", "结构止损 ¥1,198.00".
+Constraints: no generic bento cards, no cream-and-serif editorial cliché, no invented claims, no device mockup, no watermark; maintain fast scanability.

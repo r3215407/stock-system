@@ -1,740 +1,247 @@
 ---
-title: Glacier 全站设计规范
-tags:
-  - Design-System
-  - UI
-  - Glacier
-status: 待审阅
-version: 0.2
-applies_to: 全站
-related:
-  - "[[趋势回调转强评分页面-PRD]]"
+name: Glacier Signal Ticket System
+description: A traceable trading verdict issued as a clipped paper ticket and carbon-copy risk receipt.
+colors:
+  carrier-navy: "#0d1b3d"
+  carrier-navy-soft: "#172a55"
+  coupon-paper: "#f7f4ed"
+  check-stock: "#ebe6dc"
+  desk-stock: "#e9e6df"
+  validation-red: "#bd2d37"
+  validation-red-deep: "#8f1f29"
+  carbon-purple: "#d8c9e8"
+  carbon-purple-ink: "#39256f"
+  verified-green: "#246d59"
+  pending-amber: "#a46816"
+  ticket-ink: "#111a2d"
+  ticket-muted: "#647087"
+  header-night: "#07142f"
+  coupon-white: "#fffdf7"
+typography:
+  display:
+    fontFamily: '"DIN Condensed", "Avenir Next Condensed", "Arial Narrow", sans-serif'
+    fontSize: "clamp(68px, 9vw, 118px)"
+    fontWeight: 800
+    lineHeight: 0.78
+    letterSpacing: "-0.04em"
+  headline:
+    fontFamily: '"Avenir Next", Avenir, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif'
+    fontSize: "clamp(36px, 5vw, 74px)"
+    fontWeight: 800
+    lineHeight: 0.96
+    letterSpacing: "-0.04em"
+  title:
+    fontFamily: '"Avenir Next", Avenir, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif'
+    fontSize: "15px"
+    fontWeight: 850
+    lineHeight: 1.35
+    letterSpacing: "0.02em"
+  body:
+    fontFamily: '"Avenir Next", Avenir, "SF Pro Display", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif'
+    fontSize: "13px"
+    fontWeight: 400
+    lineHeight: 1.55
+    letterSpacing: "normal"
+  label:
+    fontFamily: '"Avenir Next", Avenir, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif'
+    fontSize: "11px"
+    fontWeight: 750
+    lineHeight: 1.5
+    letterSpacing: "0.08em"
+rounded:
+  circle: "50%"
+spacing:
+  xs: "6px"
+  sm: "8px"
+  compact: "10px"
+  md: "14px"
+  lg: "18px"
+  xl: "22px"
+  xxl: "24px"
+components:
+  button-validation:
+    backgroundColor: "{colors.validation-red}"
+    textColor: "{colors.coupon-white}"
+    padding: "0 22px"
+    height: "40px"
+  button-validation-hover:
+    backgroundColor: "{colors.validation-red-deep}"
+    textColor: "{colors.coupon-white}"
+  button-risk:
+    backgroundColor: "{colors.carbon-purple-ink}"
+    textColor: "{colors.coupon-white}"
+    padding: "0 22px"
+    height: "40px"
+  input-ticket:
+    backgroundColor: "transparent"
+    textColor: "{colors.carrier-navy}"
+    height: "34px"
+  coupon-verdict:
+    backgroundColor: "{colors.coupon-paper}"
+    textColor: "{colors.ticket-ink}"
+    padding: "clamp(24px, 4vw, 50px)"
+  coupon-risk:
+    backgroundColor: "{colors.carbon-purple}"
+    textColor: "{colors.carbon-purple-ink}"
+    padding: "24px 22px"
 ---
 
-# Glacier 全站设计规范
+# Design System: Glacier Signal Ticket System
 
-> **Glacier / 冰川编辑风格**：冷静、清晰、轻盈、有生命力。
->
-> 本文件是网站的全局设计基准。后续新增页面和组件应优先复用这里定义的颜色、字体、间距、圆角、交互和数据展示方式；若需要偏离，必须说明原因并补充规范版本。
+## Overview
 
-## 1. 设计目标
+**Creative North Star: "The Traceable Verdict Ticket"**
 
-Glacier 需要传递四种感受：
+Glacier Signal turns a stock evaluation into an issued trading document: carrier navy holds the set, paper-white coupons carry the verdict, and a carbon-purple receipt records risk and position outputs. The mood is procedural, restrained, and accountable. Every result should feel stamped, attached, and auditable rather than summarized in a generic analytics dashboard.
 
-- **冷静**：降低交易页面的情绪刺激，不使用大面积高饱和红绿；
-- **清晰**：用深墨色文字、精确数字和稳定边框建立可信度；
-- **轻盈**：用近白纸张底色、大留白和少量冰蓝环境光降低压迫感；
-- **编辑感**：通过大字号、紧行距、非对称构图和局部强调建立鲜明节奏。
+The system favors dense but ordered information, visible provenance, and state changes that leave a legible trace. Paper grain, ruled lines, perforations, clipped corners, carbon numerals, and validation marks provide character without weakening Chinese body-text clarity. Red marks action, failure, pending issuance, and cancellation; green is reserved for completed validation.
 
-### 1.1 Hallmark Tally风格转译
+**Key Characteristics:**
 
-本版参考Hallmark的Tally示例页，但只吸收其设计语言，不复制品牌、文案和产品结构：
+- Ticket-book composition held by deep carrier navy
+- Warm paper coupons and a distinct carbon-copy risk surface
+- Clipped corners, dashed tears, perforation holes, and ruled rows
+- Condensed, tabular numerals for scores, prices, and codes
+- Explicit pass, fail, and pending words or symbols alongside color
+- Verdict-first hierarchy with risk output visibly attached
 
-- 近白、略带冷灰的纸张底色，页面顶部允许两处非常浅的径向环境光；
-- 深墨色作为绝对主色，冰川蓝与蓝紫只用于操作、焦点词和关键数据；
-- 首屏标题采用超大字号、紧行距和负字距，中文按语义主动控制换行；
-- 顶部导航、主要按钮和紧凑筛选器使用胶囊轮廓；
-- 主要数据面板使用20px圆角、1px低对比边框和实体表面；
-- 普通卡片不加阴影，只有首屏预览和粘性结论卡使用一层柔和投影；
-- 章节之间使用80–128px的大留白，组件内部保持紧凑，形成“展开—收紧—停顿”的阅读节奏；
-- 不引入参考页的酸绿色品牌色，改用Glacier冰蓝和低饱和蓝紫。
+## Colors
 
-设计应帮助用户快速回答：
+The palette behaves like printed operational stationery: dark navy structure, warm paper, purple carbon copy, and scarce validation inks.
 
-1. 当前结论是什么？
-2. 哪些条件通过、失败或尚未确认？
-3. 评分依据是什么？
-4. 最大计划风险是多少？
-5. 下一步应该做什么？
+### Primary
 
-## 2. 核心原则
+- **Carrier Navy:** The enclosing wallet, section headers, brand data, and high-authority structure.
+- **Carrier Navy Soft:** A secondary dark layer for navy-on-navy depth where the carrier needs separation.
 
-### 2.1 数据优先
+### Secondary
 
-- 结论、分数、价格、止损和仓位优先于装饰；
-- 数字采用稳定对齐，避免因位数变化导致页面跳动；
-- 指标必须同时展示名称、实际值、阈值和状态；
-- 颜色只作为辅助，不能成为唯一判断方式。
-
-### 2.2 克制表达
-
-- 避免渐变文字、强烈霓虹、大面积发光和复杂玻璃拟态；
-- 不使用“暴涨机会”“强烈买入”“胜率极高”等煽动性文案；
-- 动画只用于解释状态变化，不用于持续吸引注意力；
-- 同一屏幕只保留一个主要操作按钮。
+- **Carbon Purple:** The risk receipt stock; use it only where account risk, stop, or position output is being issued.
+- **Carbon Purple Ink:** Numerals, fields, and actions that belong to the risk receipt.
 
-### 2.3 风险优先
-
-- “不入场”和硬性过滤失败必须比总分更醒目；
-- 高分不能使用过度兴奋的绿色或庆祝动画；
-- 未知、待确认与明确失败必须视觉上可区分；
-- 仓位结果必须和计划最大亏损同时出现。
-
-### 2.4 一致性优先
+### Tertiary
 
-- 所有页面使用统一令牌，不在组件内随意增加相近颜色；
-- 同一种状态使用相同图标、颜色和措辞；
-- 卡片、表格、表单和弹窗遵循同一圆角与间距体系；
-- 页面新增组件前，先检查现有组件能否复用。
-
----
-
-## 3. 视觉方向
-
-### 3.1 关键词
+- **Validation Red:** The primary signing action, failed or void state, selected confirmation, and validation stamp.
+- **Validation Red Deep:** Hover state and long-form error copy that needs stronger contrast.
+- **Verified Green:** Passed checks and a successfully issued validation stamp.
+- **Pending Amber:** Incomplete or indeterminate checks; it must always be paired with a pending symbol or label.
 
-```text
-冰川 / 纸张 / 极地天空 / 深墨 / 精密仪表 / 编辑排版 / 安静科技
-```
+### Neutral
 
-### 3.2 推荐视觉
+- **Coupon Paper:** The master verdict and score-detail stock.
+- **Check Stock:** The slightly darker automatic-check and supplementary coupon stock.
+- **Desk Stock:** The neutral surface below the navy ticket holder.
+- **Ticket Ink:** Primary Chinese copy on light tickets.
+- **Ticket Muted:** Supporting explanations, provenance, labels, and disclaimers.
+- **Coupon White:** High-contrast display copy on dark carriers and actions.
+- **Header Night:** The route-specific application header above the ticket set.
 
-- 大面积近白冷灰纸张背景；
-- 深海蓝作为文字和高权重信息；
-- 冰川蓝作为主操作色；
-- 极细冷灰蓝边框建立结构；
-- 顶部导航使用胶囊外形和轻微背景模糊；
-- 清晰的大留白、非对称首屏和稳定网格；
-- 标题中的一个短语可以使用蓝紫色斜体强调，单个标题不得超过一处；
-- 图表使用低饱和、可辨识的冷色序列。
+### Named Rules
 
-### 3.3 禁止视觉
+**The Carbon Boundary Rule.** Carbon purple belongs to risk, stop, position, and their attached action; do not spread it across ordinary content.
 
-- 大面积纯黑背景搭配荧光蓝；
-- 大面积高饱和红色或绿色；
-- 股票软件常见的密集红绿闪烁；
-- 多层重阴影和悬浮卡片堆叠；
-- 无信息意义的粒子、雪花或流光动画；
-- 为追求未来感而降低文字可读性。
+**The Ink Has Meaning Rule.** Red, green, and amber are operational states, not decorative accents, and color never stands alone.
 
----
+## Typography
 
-## 4. 颜色系统
+**Display Font:** DIN Condensed (with Avenir Next Condensed and Arial Narrow fallbacks)
 
-### 4.1 Glacier 基础色板
-
-| Token | 色值 | 用途 |
-|---|---|---|
-| `glacier-0` | `#FFFFFF` | 纯白、输入框和浮层表面 |
-| `glacier-25` | `#F7F8F6` | 页面主背景、冷灰纸张 |
-| `glacier-50` | `#F0F4F4` | 次级背景、表头、禁用表面 |
-| `glacier-100` | `#E3EFF4` | 分隔区、轻提示背景 |
-| `glacier-200` | `#C9DEE8` | 默认边框 |
-| `glacier-300` | `#A7C8D7` | 强调边框、占位图形 |
-| `glacier-400` | `#72AFC4` | 次级强调、图表序列 |
-| `glacier-500` | `#3B91AE` | 品牌主色、主要按钮 |
-| `glacier-600` | `#25748F` | 主色悬停、链接 |
-| `glacier-700` | `#1E5A70` | 主色按下、深色强调 |
-| `glacier-800` | `#183F50` | 标题、深色表面 |
-| `glacier-900` | `#102C3A` | 主文字、导航深色背景 |
-| `glacier-950` | `#081C26` | 最高对比文字、深色模式背景 |
-
-### 4.2 辅助冷色
-
-| Token | 色值 | 用途 |
-|---|---|---|
-| `ice-cyan` | `#69D2E7` | 数据高亮、焦点光环 |
-| `polar-blue` | `#568AF2` | 信息状态、图表对比 |
-| `aurora-violet` | `#8B86E8` | 候选、待次日确认 |
-| `deep-ocean` | `#123746` | 深色导航和重点数据块 |
-| `editorial-violet` | `#5661D9` | 标题焦点词、候选强调 |
-| `frost-mint` | `#BCE8D7` | 顶部环境光，仅低透明度使用 |
-
-辅助色每个页面最多使用两种，不能与主色竞争。
-
-### 4.3 中性色与文字
-
-| Token | 色值 | 用途 |
-|---|---|---|
-| `text-primary` | `#102C3A` | 标题、核心数字、正文主文字 |
-| `text-secondary` | `#476775` | 辅助说明、表格次要信息 |
-| `text-tertiary` | `#718C98` | 时间、来源、占位文字 |
-| `text-disabled` | `#9FB3BC` | 禁用文字 |
-| `border-subtle` | `#E3EFF4` | 轻分隔线 |
-| `border-default` | `#C9DEE8` | 输入框、卡片边框 |
-| `surface-page` | `#F8FBFD` | 页面背景 |
-| `surface-card` | `#FFFFFF` | 卡片和输入控件 |
-| `surface-raised` | `rgba(255,255,255,0.88)` | 导航、浮层和粘性结果栏 |
-
-### 4.4 交易语义色
-
-交易状态不直接沿用A股行情红涨绿跌的习惯。语义色只表达系统状态：
-
-| 状态 | 文字/图标 | 浅背景 | 边框 | 含义 |
-|---|---|---|---|---|
-| 通过 | `#237A65` | `#ECF8F4` | `#A8DCCF` | 条件已满足 |
-| 不通过/风险 | `#B44D5C` | `#FFF1F3` | `#E8B5BD` | 硬性失败、禁止执行 |
-| 警告 | `#9A6B18` | `#FFF8E8` | `#E7D29B` | 需要注意但不一定否决 |
-| 信息 | `#356FC1` | `#EEF5FF` | `#B7CEF2` | 数据和一般说明 |
-| 候选/待执行 | `#665FB5` | `#F3F1FF` | `#C9C4EF` | T日通过，等待T+1确认 |
-| 未知/待补充 | `#647985` | `#F2F6F8` | `#CBD8DE` | 缺数据或未回答 |
-
-使用规则：
-
-- 不通过状态优先级最高；
-- 通过状态使用低饱和青绿色，不使用鲜绿色；
-- 高匹配评分仍以 Glacier 主色呈现，不使用庆祝式绿色；
-- 涨跌幅可在图表中使用红/绿，但必须同时配合 `+/-` 符号和文字；
-- 单个页面的语义色面积不得超过页面可视面积的15%。
-
-### 4.5 主色渐变
-
-仅允许用于页面顶部两处极浅径向环境光或关键结果卡的1像素强调线：
-
-```text
-Glacier Flow: #69D2E7 → #3B91AE → #568AF2
-```
-
-禁止用于大面积按钮、正文文字、表格背景和评分数字。
-
----
-
-## 5. 深色模式
-
-首版以浅色模式为默认。若提供深色模式，使用“极夜冰川”而不是纯黑霓虹风格。
-
-| Token | 深色值 |
-|---|---|
-| `surface-page` | `#081C26` |
-| `surface-card` | `#102A36` |
-| `surface-raised` | `rgba(16,42,54,0.90)` |
-| `text-primary` | `#EDF7FA` |
-| `text-secondary` | `#B5CAD3` |
-| `text-tertiary` | `#88A4B0` |
-| `border-subtle` | `#183E4D` |
-| `border-default` | `#285364` |
-| `primary` | `#69C3DC` |
-
-深色模式要求：
-
-- 不以纯黑 `#000000` 作为大面积背景；
-- 卡片主要依靠边框和明度差分层，不使用强阴影；
-- 语义状态必须单独校验对比度；
-- 图表网格线透明度控制在15%以内。
-
----
-
-## 6. 字体与数字
-
-### 6.1 字体族
-
-中文界面优先使用系统字体，避免额外字体影响加载速度：
-
-```text
-界面字体：Inter, "SF Pro Display", "PingFang SC", "Microsoft YaHei", sans-serif
-数字字体："SF Mono", "Roboto Mono", "JetBrains Mono", monospace
-```
-
-若环境没有Inter，直接使用系统字体。正文中文不强制使用等宽字体。
-
-### 6.2 字号层级
-
-| Token | 字号/行高 | 字重 | 用途 |
-|---|---|---:|---|
-| `display` | 56–80 / 0.96–1.04 | 600 | 首页主标题，使用负字距 |
-| `h1` | 40–56 / 1.05 | 600 | 页面标题 |
-| `h2` | 28–40 / 1.08 | 600 | 一级模块标题 |
-| `h3` | 18/26 | 600 | 卡片标题 |
-| `body-lg` | 16/26 | 400 | 重要说明 |
-| `body` | 14/22 | 400 | 默认正文、表格 |
-| `label` | 13/18 | 550 | 表单标签、状态标签 |
-| `caption` | 12/18 | 400 | 日期、来源、辅助说明 |
-| `metric-lg` | 36/40 | 650 | 总分、最终仓位、最大风险 |
-| `metric` | 20/26 | 600 | 指标值、价格 |
-
-避免使用300及以下的细字重，保证中文在高分辨率屏幕上仍然清晰。
-
-### 6.3 数字规范
-
-- 核心数字使用等宽数字或 `tabular-nums`；
-- 金额千位分隔，例如 `100,000.00元`；
-- 价格默认保留2位小数；
-- 百分比默认保留2位，极小指标可保留4位；
-- 正数显示 `+`，负数显示 `−`；
-- 分数格式统一为 `82 / 100`；
-- 未知值显示 `—`，不显示 `0`；
-- 待确认分数显示 `+5 待确认`，不能混入已得分。
-
----
-
-## 7. 布局与网格
-
-### 7.1 页面宽度
-
-| 场景 | 规则 |
-|---|---|
-| 桌面端 | 内容最大宽度 `1280px`，左右边距至少 `32px` |
-| 笔记本 | 内容宽度自适应，左右边距 `24px` |
-| 平板 | 单列或两列混排，左右边距 `20px` |
-| 手机 | 单列，左右边距 `16px` |
-
-### 7.2 网格
-
-- 桌面端使用12列网格，列间距24px；
-- 主要内容建议8列，粘性结论区建议4列；
-- 低于960px时切换为单列；
-- 表单标签与输入内容保持统一起始线；
-- 同一模块中的核心数字基线对齐。
-
-### 7.3 间距体系
-
-使用4px基础单位：
-
-| Token | 数值 | 用途 |
-|---|---:|---|
-| `space-1` | 4px | 图标与文字微间距 |
-| `space-2` | 8px | 紧凑元素间距 |
-| `space-3` | 12px | 标签与输入框、按钮内部 |
-| `space-4` | 16px | 默认组件间距 |
-| `space-5` | 20px | 卡片紧凑内边距 |
-| `space-6` | 24px | 默认卡片内边距、网格间距 |
-| `space-8` | 32px | 模块内分组 |
-| `space-10` | 40px | 主要区块间距 |
-| `space-12` | 48px | 页面章节间距 |
-| `space-16` | 64px | 页面顶部和大型区块 |
-
-不得使用不属于该体系的随意间距，除非用于1px边框或视觉微调。
-
----
-
-## 8. 形状、边框与阴影
+**Body Font:** Avenir Next (with PingFang SC, Microsoft YaHei, and system sans-serif fallbacks)
+**Label/Mono Font:** The condensed display stack with tabular numerals for codes and quantitative output
 
-### 8.1 圆角
-
-| Token | 数值 | 用途 |
-|---|---:|---|
-| `radius-sm` | 6px | 标签、紧凑控件 |
-| `radius-md` | 12px | 输入框、表格容器 |
-| `radius-lg` | 16px | 紧凑卡片 |
-| `radius-xl` | 20px | 默认数据面板、重点结果卡、弹窗 |
-| `radius-pill` | 999px | 顶部导航、按钮、状态徽标和组合搜索框 |
-
-### 8.2 边框
-
-- 默认边框：`1px solid border-default`；
-- 轻分隔线：`1px solid border-subtle`；
-- 焦点边框：`2px solid glacier-500`；
-- 状态边框使用对应语义色；
-- 不使用双线边框和粗重描边。
-
-### 8.3 阴影
-
-```text
-shadow-sm: 0 1px 2px rgba(16, 44, 58, 0.05)
-shadow-md: 0 12px 32px -18px rgba(20, 30, 80, 0.28)
-shadow-lg: 0 24px 60px -28px rgba(20, 30, 80, 0.32)
-```
-
-- 普通卡片使用实体背景和边框，仅在首屏预览、顶部导航或粘性结论区使用阴影；
-- 同一页面不超过两种阴影层级；
-- 不使用彩色外发光作为常驻效果。
-
----
-
-## 9. 核心组件规范
-
-### 9.1 顶部导航
-
-- 桌面高度54–56px，手机高度52px；
-- 使用居中的胶囊轮廓，最大宽度720px；
-- 浅色模式使用近白半透明背景、20px背景模糊、细边框和一层轻阴影；
-- 左侧显示产品名称，右侧放置记录、设置和主题切换；
-- 不在导航中放置交易结论；
-- 手机端保留产品名称和一个菜单入口。
+**Character:** Narrow Latin and large tabular figures evoke issued tickets and machine-set receipts. Chinese text stays in a highly legible sans-serif, with weight and spacing—not imitation condensed glyphs—carrying hierarchy.
 
-### 9.2 股票代码输入
+### Hierarchy
 
-- 桌面端高度48px，手机端不低于48px；
-- 输入框与主按钮组成一个明确搜索单元；
-- 占位文案：`输入股票代码，例如 600519`；
-- 提交按钮：`开始评估`；
-- 加载时按钮文字改为 `正在评估…`，防止重复提交；
-- 错误信息显示在输入框下方，不使用只出现几秒的浮动提示。
+- **Display** (800, fluid oversized scale, 0.78 line-height): Candidate score and other singular, dominant machine-read values.
+- **Headline** (800, fluid large scale, 0.96 line-height): Stock name, decisive verdicts, and empty or error-state statements.
+- **Title** (850, compact scale, 1.35 line-height): Coupon, receipt, module, and section headings.
+- **Body** (400, compact scale, 1.55 line-height): Explanations and operating guidance, generally kept within a readable 620–720px measure.
+- **Label** (750, small scale, 0.08em letter-spacing): Field names, metadata, and uppercase-like ticket annotations.
 
-### 9.3 按钮
+### Named Rules
 
-#### 主要按钮
+**The Numerical Authority Rule.** Prices, scores, dates, codes, shares, and percentages use tabular numerals; the largest type is reserved for the one value that decides the current step.
 
-- 背景 `glacier-500`，文字白色；
-- Hover：`glacier-600`；
-- Active：`glacier-700`；
-- Focus：外侧2px `ice-cyan` 焦点环；
-- 只用于当前页面的首要动作。
-- 默认使用胶囊圆角；按钮高度40–52px，文字保持单行。
+## Layout
 
-#### 次要按钮
+The outer shell is centered and capped at 1500px, with compact page gutters and generous bottom clearance. The desktop ticket holder is a three-part grid: a narrow check strip, a dominant verdict coupon, and a risk receipt. At 1100px the verdict spans the first row while checks and receipt share the second. At 760px the set becomes a single column in verdict, checks, receipt order; below 420px, headers, score blocks, and three-up price data collapse further. Horizontal overflow is clipped and every grid child permits shrinking.
 
-- 白色背景、`border-default` 边框、`text-primary` 文字；
-- Hover 使用 `glacier-50`；
-- 用于保存、复制、重新评估。
+Spacing uses a compact 6–24px rhythm inside operational controls and coupon rows, while the master verdict may expand to 50px padding. Dashed separators organize dense content without introducing independent cards. Score modules and supplementary conditions continue as full-width detachable strips below the primary ticket set.
 
-#### 危险或否决动作
+**The Attached Sequence Rule.** Responsive changes may reorder and compress coupons, but they must preserve the task sequence and the visual sense that checks, verdict, and risk receipt belong to one issued set.
 
-- 默认使用白色背景和风险色文字；
-- 只有确认弹窗中的最终危险动作使用风险色实底；
-- 不把“不入场”做成可点击按钮。
+## Elevation & Depth
 
-### 9.4 数据面板
+Depth is mostly structural: navy carrier behind paper, tonal stock changes, one-pixel borders, dashed tears, ruled textures, and clipped silhouettes. Shadows are low, wide, and heavily negative-spread, used to seat the search ticket, carrier, and coupons rather than make them float like app cards.
 
-- 默认近白或白色实体背景、1px冷灰蓝边框、20px圆角；
-- 内边距24px，手机端16px；
-- 卡片标题和操作保持同一水平线；
-- 嵌套卡片最多一层，更多层级改用分隔线；
-- 结果卡可以使用2px顶部状态线，但不整块填满语义色。
+### Shadow Vocabulary
 
-### 9.5 状态徽标
+- **Search Seat** (`0 18px 32px -28px rgba(13, 27, 61, 0.8)`): A restrained shadow beneath the standalone search ticket.
+- **Carrier Seat** (`0 26px 60px -36px rgba(4, 13, 35, 0.95)`): The deepest shadow, reserved for the navy ticket holder.
+- **Coupon Seat** (`0 22px 44px -34px rgba(5, 15, 38, 0.9)`): A narrow separation between paper and its carrier.
 
-统一文案：
+**The Printed-First Rule.** Texture, borders, and overlapping stock establish depth before shadow; never turn coupons into glossy floating cards.
 
-```text
-通过 / 不通过 / 待补充 / 候选 / 不交易 / 允许试仓 / 标准交易 / 高匹配
-```
+## Shapes
 
-- 高度24px或28px；
-- 左侧配图标，右侧为文字；
-- 禁止只显示一个彩色圆点；
-- 同一结果不要出现多个同义标签。
+Primary surfaces and actions use clipped octagonal corners, generally cutting 8–14px from each corner. Detachable relationships use dashed borders and repeated semicircular perforation holes. Circular geometry is limited to 18px status marks and native choice controls. The system avoids soft card radii on the evaluation surface; its silhouette is cut paper, not a rounded software panel.
 
-### 9.6 选择题
+**The Cut, Do Not Round Rule.** Use clipped corners for tickets, buttons, headers, and coupons; reserve true circles for compact status or selection marks.
 
-- 单选题使用整行可点击选项卡，不只让圆形按钮可点击；
-- 每个选项提供明确后果，例如 `存在风险事件 — 本次不入场`；
-- “不确定”固定放在最后；
-- 硬性问题未回答时显示冷灰蓝边框，回答失败后使用风险色边框；
-- 不预选“通过”选项；
-- 修改答案后即时重算，并以轻量过渡提示结果变化。
+## Components
 
-### 9.7 输入框
+### Buttons
 
-- 标签始终可见，不以占位文字替代标签；
-- 数字输入右侧显示单位，例如 `元`、`股`、`%`；
-- 错误状态同时显示图标、边框和文字；
-- 禁用状态需要保持可读，不能把透明度降得过低；
-- 金额输入允许千位分隔，提交时按数值计算。
+- **Shape:** Clipped ticket geometry with 8px corner cuts; no rounded capsule.
+- **Primary:** Validation red with white copy, a 40px minimum height, and firm 800 weight.
+- **Hover / Focus:** Hover deepens to validation red deep; keyboard focus uses a 3px translucent red outline with 3px offset.
+- **Risk Action:** Carbon-purple ink on the purple receipt, full width when it issues the attached backtest action.
 
-### 9.8 表格
+### Cards / Containers
 
-- 表头使用 `glacier-50` 背景；
-- 行高至少44px；
-- 数字右对齐，文字左对齐，状态居中或左对齐；
-- 默认不使用纵向分隔线；
-- Hover 仅使用轻微冰色背景；
-- 手机端转换为卡片列表，不强制横向压缩全部列。
+- **Corner Style:** Clipped paper with 8–14px cuts, sometimes joined by dashed tear edges.
+- **Background:** Coupon paper for verdict and detail, check stock for validation lists, carbon purple for risk output, and carrier navy beneath the set.
+- **Shadow Strategy:** Use the restrained seating shadows defined above.
+- **Border:** One-pixel navy or purple ink at translucent strength; dashed lines express internal rules and detachable seams.
+- **Internal Padding:** 18–24px for standard coupons; the master verdict expands fluidly from 24px to 50px.
 
-### 9.9 提示与警告
+### Inputs / Fields
 
-- 普通说明使用信息色或冷灰蓝；
-- 可恢复问题使用警告色；
-- 硬性失败使用风险色；
-- 每条提示包含“发生了什么”和“下一步怎么做”；
-- 重要提示持续显示，不使用自动消失的Toast承载关键结论。
+- **Style:** Transparent, borderless input sitting on a single ink-colored bottom rule; values use strong tabular numerals.
+- **Focus:** The field or containing choice receives the shared red focus outline; the input does not introduce a rounded inset box.
+- **Error / Disabled:** Error copy uses deep validation red; unavailable calculated output shows an em dash rather than fabricated data.
 
-### 9.10 弹窗与抽屉
+### Navigation
 
-- 简短确认使用弹窗；
-- 账户设置、评分明细等长内容使用右侧抽屉；
-- 弹窗最大宽度560px，圆角20px；
-- 背景遮罩使用深海蓝20%至35%透明度；
-- 关闭操作清晰可见，并支持Esc键。
+The evaluation route uses a translucent header-night bar with square-edged links and inputs. Active navigation receives a faint white fill and hairline border; inactive items stay muted blue-gray until hover. On mobile, the menu becomes a full-width dark continuation below the 68px header and the search action switches to validation red.
 
----
+### Validation Stamp
 
-## 10. 评分页面专用组件
+A double-line red stamp, slightly rotated, carries the explicit pending or void wording. Successful issuance changes the ink to verified green and uses a slightly calmer rotation. Its entrance is a single 480ms stamp impression and is suppressed by reduced-motion preferences.
 
-### 10.1 股票摘要卡
+### Status Rows and Confirmations
 
-信息层级：
+Automatic checks use an 18px outlined circle containing a check, cross, or pending mark plus a written state. User choices are rectangular ruled rows with at least 42px height; selection adds a red border and a light red wash while preserving consequence copy.
 
-1. 股票名称和代码；
-2. 最新收盘价及数据日期；
-3. 市场、复权方式、行情条数；
-4. 当前评估阶段和数据完整度。
+### Score Disclosure Coupon
 
-股票名称使用 `h2`，代码和数据元信息使用 `caption`。涨跌幅不应比交易结论更醒目。
+Expandable score modules remain flat paper strips. The summary aligns module identity, reason, score, and a plus/minus mark; opening rotates only the vertical stroke over 160ms and reveals a dashed-top detail region.
 
-### 10.2 硬性过滤卡
+## Do's and Don'ts
 
-- 放在评分卡之前；
-- 失败时卡片顶部使用风险色2px强调线；
-- 同时列出全部失败项；
-- 通过数量可显示为 `8 / 10`，未知项单独计数；
-- 硬性失败后评分区降低视觉权重，但仍可展开查看。
+### Do:
 
-### 10.3 总分卡
+- **Do** lead with the current verdict and any blocking condition before score detail.
+- **Do** preserve the carrier, coupon, carbon-copy, perforation, and validation-mark vocabulary across screen sizes.
+- **Do** pair red, green, and amber with text or a distinct symbol.
+- **Do** keep quantitative values tabular and keep risk output on carbon purple.
+- **Do** honor reduced-motion preferences and maintain visible keyboard focus.
 
-推荐结构：
+### Don't:
 
-```text
-候选评分
-82 / 95          +5 待次日确认
-标准交易候选
-```
-
-- `82` 使用 `metric-lg`；
-- 分母和待确认分使用 `text-secondary`；
-- 不使用圆形仪表盘制造精确概率感；
-- 可以使用水平分段条展示已得、未得和待确认；
-- 硬性失败时在分数上方显示“不入场”，不得只显示高分。
-
-### 10.4 分项评分卡
-
-- 五个评分模块使用统一列表或横向卡片；
-- 每项展示 `20 / 25`、状态数量和简短原因；
-- 展开后显示实际值、阈值、日期和来源；
-- 自动数据使用“自动”标签，用户答案使用“用户确认”标签；
-- 未知项使用虚线边框或冷灰蓝背景，不使用红色。
-
-### 10.5 风险仓位卡
-
-视觉优先级：
-
-1. 最终建议股数；
-2. 计划最大亏损；
-3. 初始止损价；
-4. 预计买入市值和账户占比；
-5. 限制仓位的原因。
-
-必须把 `500股` 与 `计划最大亏损500元` 放在相邻位置。不得只突出可买股数。
-
-### 10.6 次日取消条件
-
-使用固定清单展示：
-
-- 高开超过2%；
-- 实际入场后止损距离超过8%；
-- 出现新的事件风险；
-- 组合风险额度不足；
-- 无法正常成交。
-
-该清单使用警告色，不使用风险色，直到条件实际触发。
-
----
-
-## 11. 图标规范
-
-- 使用统一的2px线性图标；
-- 推荐视觉尺寸16px、18px、20px、24px；
-- 圆角端点和圆角连接，与Glacier柔和冰面风格一致；
-- 图标只辅助识别，不代替文字；
-- 不混用填充、线性、拟物三套图标。
-
-建议状态映射：
-
-| 状态 | 图标含义 |
-|---|---|
-| 通过 | 圆形对勾 |
-| 不通过 | 八边形或圆形叉号 |
-| 警告 | 三角感叹号 |
-| 未知 | 圆形问号 |
-| 待确认 | 时钟 |
-| 数据来源 | 数据库 |
-| 自动计算 | 计算器或闪电 |
-| 用户回答 | 用户轮廓 |
-
----
-
-## 12. 图表规范
-
-### 12.1 颜色顺序
-
-图表默认序列：
-
-```text
-#3B91AE, #568AF2, #8B86E8, #69D2E7, #72AFC4, #1E5A70
-```
-
-- 同一图表不超过6种颜色；
-- 基准指数使用冷灰蓝，目标股票使用 Glacier 主色；
-- MA5、MA10、MA20、MA60需要固定颜色，不随页面变化；
-- 涨跌区域使用低透明度填充，避免红绿占据大面积。
-
-建议均线映射：
-
-| 指标 | 颜色 |
-|---|---|
-| 收盘价 | `#102C3A` |
-| MA5 | `#69D2E7` |
-| MA10 | `#568AF2` |
-| MA20 | `#3B91AE` |
-| MA60 | `#8B86E8` |
-| 初始止损 | `#B44D5C`，虚线 |
-| 计划入场 | `#25748F`，点划线 |
-
-### 12.2 图表交互
-
-- Tooltip显示日期、价格、指标值和状态；
-- 十字光标使用低饱和细线；
-- 默认只显示与当前判断有关的指标；
-- 允许用户开关均线，但不允许修改评分参数而不留记录；
-- 图表不承担唯一结论，旁边必须有文字说明。
-
----
-
-## 13. 动效规范
-
-### 13.1 时长
-
-| 类型 | 时长 |
-|---|---:|
-| Hover、焦点 | 120–160ms |
-| 选项切换、数值更新 | 180–220ms |
-| 卡片展开 | 220–280ms |
-| 抽屉和弹窗 | 240–320ms |
-
-使用自然减速曲线，例如 `cubic-bezier(0.22, 1, 0.36, 1)`。
-
-### 13.2 允许动效
-
-- 页面加载时的轻微淡入；
-- 选择题提交后的状态颜色过渡；
-- 分数变化时短暂高亮变化位置；
-- 卡片展开和收起；
-- 加载中的静态骨架屏或低调进度指示。
-
-### 13.3 禁止动效
-
-- 持续闪烁的行情数字；
-- 高分庆祝动画；
-- 大范围背景流光；
-- 自动滚动到“买入”按钮；
-- 影响阅读的数字翻牌动画。
-
-必须支持系统“减少动态效果”设置。
-
----
-
-## 14. 响应式规则
-
-### 桌面端 `>= 1200px`
-
-- 12列网格；
-- 评分明细8列，结果与仓位4列并可粘性定位；
-- 表格完整显示；
-- 股票输入宽度480至640px。
-
-### 平板 `768–1199px`
-
-- 主要内容单列；
-- 总分和仓位可以两列排列；
-- 不使用粘性侧栏；
-- 表格允许适度横向滚动。
-
-### 手机 `< 768px`
-
-- 全部单列；
-- 主按钮与输入框可上下排列；
-- 核心结果固定顺序：结论 → 分数 → 风险 → 原因 → 明细；
-- 选择题每个选项占满可用宽度；
-- 表格转换为字段卡片；
-- 不固定底部大按钮，避免遮挡风险信息。
-
----
-
-## 15. 无障碍要求
-
-- 正文与背景对比度至少达到WCAG AA；
-- 关键文字和核心数字尽量达到7:1；
-- 所有交互元素支持键盘导航；
-- 焦点状态始终可见；
-- 点击区域至少44×44px；
-- 表单错误与对应字段建立明确关联；
-- 状态不能只依赖红、绿或蓝色；
-- 图标提供可访问名称，纯装饰图标对辅助技术隐藏；
-- 图表提供文字摘要或数据表替代；
-- 页面缩放至200%时不丢失主要功能。
-
----
-
-## 16. 文案风格
-
-### 16.1 语气
-
-- 冷静、直接、可验证；
-- 先说结论，再解释原因；
-- 使用“条件”“风险”“计划”，少用“机会”“看好”“确定”；
-- 避免人格化市场，例如“主力正在洗盘”；
-- 不把系统结论写成命令或保证。
-
-### 16.2 推荐文案
-
-| 场景 | 推荐 |
-|---|---|
-| 硬性失败 | `不入场：MA20尚未向上` |
-| 数据缺失 | `暂时无法判断：缺少行业指数数据` |
-| 候选通过 | `候选条件通过，等待次日开盘确认` |
-| 风险不足 | `可用风险额度不足，本次计划仓位为0股` |
-| 高开取消 | `开盘高于允许价格，取消本次交易` |
-| 分数说明 | `评分表示与模型的匹配程度，不代表上涨概率` |
-
-### 16.3 禁止文案
-
-```text
-强烈买入 / 稳赚 / 必涨 / 抄底良机 / 胜率82% / AI建议重仓 / 错过可惜
-```
-
----
-
-## 17. 设计令牌建议
-
-后续实现时，颜色和尺寸应定义为全局设计令牌。命名使用语义层，不让页面直接依赖具体色值。
-
-```text
-color.bg.page
-color.bg.card
-color.bg.raised
-color.text.primary
-color.text.secondary
-color.text.tertiary
-color.border.subtle
-color.border.default
-color.action.primary
-color.action.primaryHover
-color.status.pass
-color.status.fail
-color.status.warning
-color.status.pending
-color.status.unknown
-
-space.1 / 2 / 3 / 4 / 5 / 6 / 8 / 10 / 12 / 16
-radius.sm / md / lg / xl / pill
-shadow.sm / md / lg
-font.display / h1 / h2 / h3 / body / label / caption / metric
-```
-
-组件只能使用语义令牌。调整全站风格时，应修改令牌而不是逐页修改颜色。
-
----
-
-## 18. 页面设计检查清单
-
-每个新页面交付前检查：
-
-- [ ] 是否使用Glacier全局颜色令牌？
-- [ ] 是否只有一个明确的主要操作？
-- [ ] 核心结论是否在首屏可见？
-- [ ] 风险信息是否与收益或评分同等醒目？
-- [ ] 通过、不通过、未知和待确认是否可以清晰区分？
-- [ ] 是否避免大面积高饱和红绿？
-- [ ] 所有数字是否使用统一格式和对齐？
-- [ ] 是否使用4px间距体系？
-- [ ] 是否复用了现有组件？
-- [ ] 手机端是否按结论优先顺序排列？
-- [ ] 键盘焦点、对比度和点击区域是否达标？
-- [ ] 动效是否克制且支持减少动态效果？
-- [ ] 是否避免暗示收益保证或上涨概率？
-- [ ] 新增设计决策是否已更新本文件版本？
-
----
-
-## 19. 待审阅事项
-
-- [ ] 是否确认浅色“冰原”作为全站默认主题？
-- [ ] 首版是否需要同时支持“极夜冰川”深色模式？
-- [ ] 主品牌色 `#3B91AE` 是否符合预期？
-- [ ] 页面是否统一使用系统字体，不加载额外中文字体？
-- [ ] 是否接受交易状态不沿用大面积红涨绿跌？
-- [ ] 是否确认总分使用水平分段条，不使用圆形仪表盘？
-- [ ] 是否确认风险仓位卡始终同时突出“股数”和“计划最大亏损”？
-- [ ] 是否需要为Glacier补充正式Logo和品牌图形规范？
-
-本版已作为全站实现基准。后续若调整品牌色、标题比例或面板形态，应升级版本并说明迁移范围。
+- **Don't** reinterpret the evaluation as a grid of interchangeable rounded metric cards.
+- **Don't** use purple as a general accent outside the risk receipt and its quantitative links.
+- **Don't** let a score visually erase a failed, void, or pending condition.
+- **Don't** detach the backtest action from the risk receipt.
+- **Don't** compress mobile into a horizontal rail or allow horizontal scrolling.

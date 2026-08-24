@@ -1,0 +1,8 @@
+Use case: ui-mockup
+Asset type: high-fidelity desktop web app direction comp, 1536x1024 landscape
+Primary request: Design Glacier Signal's Chinese stock evaluation workbench as a jet-age ticket wallet made of sequential carbon-copy coupons. It must function as an interface, not retro poster art.
+Structure: narrow navigation; one wide primary coupon holding 贵州茅台 600519.SH, 等待转强 and 71/100; attached coupon sections for hard filters, technical score, and risk budget; a purple carbon-copy risk stub on the right with stop ¥1,198.00; voided or pending items remain stamped and readable; second-fold details visible below.
+Style/medium: carrier navy, crisp white coupon stock, red validation/VOID stamps, carbon purple numerals, perforations and clipped ticket corners, one condensed airline grotesk.
+Palette: #0D1B3D, #F8F7F2, #D7262D, #4B2E83, #D9D3C7.
+Exact text: "Glacier Signal", "贵州茅台", "600519.SH", "等待转强", "候选评分 71 / 100", "硬性过滤", "风险预算", "结构止损 ¥1,198.00".
+Constraints: no airplane imagery, no boarding-pass novelty overload, no generic cards, no invented claims, no device mockup, no watermark; professional risk-tool credibility first.

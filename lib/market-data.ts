@@ -9,7 +9,7 @@ import {
   type ScoreModule,
 } from "@/lib/evaluation";
 
-type DailyBar = {
+export type DailyBar = {
   date: string;
   open: number;
   close: number;
@@ -94,7 +94,7 @@ function instrumentType(name: string): MarketDataSnapshot["instrumentType"] {
   return /ETF|LOF|基金/i.test(name) ? "交易所交易基金" : "A股";
 }
 
-function shanghaiClock(now = new Date()) {
+export function shanghaiClock(now = new Date()) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Shanghai",
     year: "numeric",
@@ -111,7 +111,7 @@ function shanghaiClock(now = new Date()) {
   };
 }
 
-function smaSeries(bars: DailyBar[], period: number) {
+export function smaSeries(bars: DailyBar[], period: number) {
   const values: Array<number | null> = Array(bars.length).fill(null);
   let sum = 0;
   for (let index = 0; index < bars.length; index += 1) {
@@ -162,7 +162,7 @@ function scoreConditions(conditions: Array<{ passed: boolean; points: number }>)
   };
 }
 
-function buildAutomaticEvaluation(bars: DailyBar[]) {
+export function buildAutomaticEvaluation(bars: DailyBar[]) {
   const lastIndex = bars.length - 1;
   const current = bars[lastIndex];
   const previous = bars[lastIndex - 1];
@@ -332,7 +332,7 @@ function buildAutomaticEvaluation(bars: DailyBar[]) {
   };
 }
 
-function buildMarketEnvironmentModule(bars: DailyBar[]): ScoreModule {
+export function buildMarketEnvironmentModule(bars: DailyBar[]): ScoreModule {
   const lastIndex = bars.length - 1;
   const ma20 = smaSeries(bars, 20);
   const currentMa20 = ma20[lastIndex];
@@ -377,7 +377,7 @@ function buildMarketEnvironmentModule(bars: DailyBar[]): ScoreModule {
   };
 }
 
-async function fetchEastmoneyBars(normalizedSymbol: string) {
+async function fetchEastmoneyBars(normalizedSymbol: string, limit = 320) {
   const params = new URLSearchParams({
     secid: eastmoneySecurityId(normalizedSymbol),
     fields1: "f1,f2,f3,f4,f5,f6",
@@ -385,7 +385,7 @@ async function fetchEastmoneyBars(normalizedSymbol: string) {
     klt: "101",
     fqt: "1",
     end: "20500101",
-    lmt: "320",
+    lmt: String(limit),
   });
   const response = await fetch(`https://push2his.eastmoney.com/api/qt/stock/kline/get?${params}`, {
     cache: "no-store",
@@ -410,9 +410,9 @@ async function fetchEastmoneyBars(normalizedSymbol: string) {
   return { name: payload.data.name, bars, provider: "东方财富公开行情" };
 }
 
-async function fetchTencentBars(normalizedSymbol: string) {
+async function fetchTencentBars(normalizedSymbol: string, limit = 320) {
   const securityId = tencentSecurityId(normalizedSymbol);
-  const params = new URLSearchParams({ param: `${securityId},day,,,320,qfq` });
+  const params = new URLSearchParams({ param: `${securityId},day,,,${limit},qfq` });
   const response = await fetch(`https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?${params}`, {
     cache: "no-store",
     headers: {
@@ -438,12 +438,19 @@ async function fetchTencentBars(normalizedSymbol: string) {
   return { name, bars: rows.map(parseTencentBar), provider: "腾讯证券公开行情" };
 }
 
-async function fetchMarketBars(normalizedSymbol: string) {
+export async function fetchMarketBars(normalizedSymbol: string, limit = 320) {
   try {
-    return await fetchTencentBars(normalizedSymbol);
+    const tencent = await fetchTencentBars(normalizedSymbol, limit);
+    if (limit <= 640 || tencent.bars.length >= limit * 0.9) return tencent;
+    try {
+      const eastmoney = await fetchEastmoneyBars(normalizedSymbol, limit);
+      return eastmoney.bars.length > tencent.bars.length ? eastmoney : tencent;
+    } catch {
+      return tencent;
+    }
   } catch (tencentError) {
     try {
-      return await fetchEastmoneyBars(normalizedSymbol);
+      return await fetchEastmoneyBars(normalizedSymbol, limit);
     } catch (eastmoneyError) {
       if (tencentError instanceof MarketDataError && tencentError.code === "NOT_FOUND") throw tencentError;
       if (eastmoneyError instanceof MarketDataError) throw eastmoneyError;
@@ -452,7 +459,7 @@ async function fetchMarketBars(normalizedSymbol: string) {
   }
 }
 
-function cleanBars(rawBars: DailyBar[]) {
+export function cleanBars(rawBars: DailyBar[]) {
   const seenDates = new Set<string>();
   return rawBars.filter((bar) => {
     const valid =

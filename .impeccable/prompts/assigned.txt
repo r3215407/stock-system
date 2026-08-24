@@ -1,0 +1,9 @@
+Use case: ui-mockup
+Asset type: high-fidelity desktop web app direction comp, 1536x1024 landscape
+Primary request: Design the first viewport and beginning of the second fold for Glacier Signal, a Chinese A-share stock evaluation workbench. The visual world is a laboratory quality-control batch release desk. This must unmistakably be an operating interface, not a poster or a photograph.
+Structure: compact product navigation; a batch identity strip for 贵州茅台 600519.SH and data date 2026-08-24; a dominant release verdict reading 等待转强 with score 71/100; a vertical assay/check track showing 硬性过滤, 技术评分, 风险预算; a right-side prescription panel showing 结构止损 ¥1,198.00, 建议仓位 —, 最大亏损 —; below, detailed test rows start unfolding. The verdict is the single focal moment.
+Style/medium: matte dark-green instrument enamel, bone assay-label paper, translucent reagent labels, thermal-record strips, fine calibration ticks, subtle authentic material depth; restrained Chinese grotesk plus compact technical numerals.
+Palette: deep lab green #122C2A, bone #F1EFE6, assay amber #D6A22A, rejection vermilion #B94335, oxidized gray-green #8FA5A0.
+Interaction cues: pass/fail/pending use symbols and words, not color alone; failed and cancelled tests remain visible and traceable.
+Exact visible Chinese text: "Glacier Signal", "贵州茅台", "600519.SH", "等待转强", "候选评分 71 / 100", "硬性过滤", "技术评分", "风险预算", "结构止损 ¥1,198.00", "查看近两年回测".
+Constraints: no generic bento dashboard, no neon trading terminal, no candlestick chart hero, no glassmorphism, no invented claims, no people, no device mockup, no watermark. Dense but calm, production-grade, accessible, generous enough for real data.

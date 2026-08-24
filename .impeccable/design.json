@@ -1,0 +1,142 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-25T03:14:48Z",
+  "title": "Design System: Glacier Signal Ticket System",
+  "extensions": {
+    "colorMeta": {
+      "carrier-navy": { "role": "primary", "displayName": "Carrier Navy", "canonical": "#0d1b3d", "tonalRamp": ["#050916", "#0d1b3d", "#172d60", "#2f4778", "#556991", "#8391ae", "#bcc5d5", "#eef1f6"] },
+      "carrier-navy-soft": { "role": "primary", "displayName": "Carrier Navy Soft", "canonical": "#172a55", "tonalRamp": ["#080e20", "#172a55", "#254174", "#3e5b8e", "#647aa8", "#91a0c2", "#c3cada", "#f0f2f7"] },
+      "coupon-paper": { "role": "neutral", "displayName": "Coupon Paper", "canonical": "#f7f4ed", "tonalRamp": ["#24211c", "#49443b", "#70695d", "#9b9385", "#c1b9ab", "#ded8cd", "#eee9df", "#f7f4ed"] },
+      "check-stock": { "role": "neutral", "displayName": "Check Stock", "canonical": "#ebe6dc", "tonalRamp": ["#25221d", "#4b463d", "#716b5f", "#999184", "#beb7aa", "#d8d2c8", "#ebe6dc", "#f7f4ee"] },
+      "desk-stock": { "role": "neutral", "displayName": "Desk Stock", "canonical": "#e9e6df", "tonalRamp": ["#24221f", "#494641", "#706c65", "#97938c", "#bbb8b1", "#d6d3cc", "#e9e6df", "#f6f4f1"] },
+      "validation-red": { "role": "tertiary", "displayName": "Validation Red", "canonical": "#bd2d37", "tonalRamp": ["#31080d", "#5b1119", "#861d27", "#bd2d37", "#d8535d", "#e9858c", "#f3bbc0", "#fcecef"] },
+      "validation-red-deep": { "role": "tertiary", "displayName": "Validation Red Deep", "canonical": "#8f1f29", "tonalRamp": ["#2c070b", "#501016", "#731821", "#8f1f29", "#bd4550", "#dc7d85", "#edb7bc", "#faecee"] },
+      "carbon-purple": { "role": "secondary", "displayName": "Carbon Purple", "canonical": "#d8c9e8", "tonalRamp": ["#211629", "#453252", "#684e7a", "#8e70a1", "#b096c1", "#ccb8da", "#dfd2eb", "#f3edf7"] },
+      "carbon-purple-ink": { "role": "secondary", "displayName": "Carbon Purple Ink", "canonical": "#39256f", "tonalRamp": ["#130922", "#251341", "#39256f", "#55418b", "#7562a5", "#9b8cbc", "#c7bed7", "#f0edf5"] },
+      "verified-green": { "role": "tertiary", "displayName": "Verified Green", "canonical": "#246d59", "tonalRamp": ["#071e17", "#123e32", "#246d59", "#3e8973", "#68a895", "#97c8b9", "#c8e2da", "#eef7f4"] },
+      "pending-amber": { "role": "tertiary", "displayName": "Pending Amber", "canonical": "#a46816", "tonalRamp": ["#271703", "#4e3008", "#754a0e", "#a46816", "#c78933", "#dda961", "#edcca0", "#fbf0da"] },
+      "ticket-ink": { "role": "neutral", "displayName": "Ticket Ink", "canonical": "#111a2d", "tonalRamp": ["#070b13", "#111a2d", "#253049", "#46516a", "#6b758b", "#98a0b0", "#c8ccd4", "#f0f1f4"] },
+      "ticket-muted": { "role": "neutral", "displayName": "Ticket Muted", "canonical": "#647087", "tonalRamp": ["#151923", "#303846", "#4a5568", "#647087", "#858fa1", "#aab1be", "#d0d4dc", "#f2f3f5"] },
+      "header-night": { "role": "neutral", "displayName": "Header Night", "canonical": "#07142f", "tonalRamp": ["#030711", "#07142f", "#142b50", "#2d466d", "#526587", "#7f8da6", "#bac2d0", "#edf0f5"] },
+      "coupon-white": { "role": "neutral", "displayName": "Coupon White", "canonical": "#fffdf7", "tonalRamp": ["#25231d", "#4b473e", "#736d60", "#9c9587", "#c3bcaf", "#e1dbd0", "#f3eee5", "#fffdf7"] }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Machine Display", "purpose": "Dominant score and quantitative output." },
+      "headline": { "displayName": "Verdict Headline", "purpose": "Stock identity, verdicts, and major state messages." },
+      "title": { "displayName": "Coupon Title", "purpose": "Coupon, module, and section headings." },
+      "body": { "displayName": "Operational Body", "purpose": "Chinese explanations and guidance." },
+      "label": { "displayName": "Ticket Label", "purpose": "Field names, metadata, and provenance." }
+    },
+    "shadows": [
+      { "name": "search-seat", "value": "0 18px 32px -28px rgba(13, 27, 61, 0.8)", "purpose": "Seats the standalone search ticket on the desk." },
+      { "name": "carrier-seat", "value": "0 26px 60px -36px rgba(4, 13, 35, 0.95)", "purpose": "Seats the navy ticket holder as the deepest layer." },
+      { "name": "coupon-seat", "value": "0 22px 44px -34px rgba(5, 15, 38, 0.9)", "purpose": "Separates paper coupons from the carrier without floating-card gloss." }
+    ],
+    "motion": [
+      { "name": "state-standard", "value": "160ms ease-out", "purpose": "Button color and disclosure-mark transitions." },
+      { "name": "stamp-impression", "value": "480ms cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "One-time validation-stamp arrival; disabled under reduced motion." }
+    ],
+    "breakpoints": [
+      { "name": "ticket-tablet", "value": "1100px" },
+      { "name": "ticket-mobile", "value": "760px" },
+      { "name": "ticket-compact", "value": "420px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Validation Button",
+      "kind": "button",
+      "refersTo": "button-validation",
+      "description": "Primary action for issuing or retrying an evaluation ticket.",
+      "html": "<button class=\"ds-btn-validation\">签发评估票</button>",
+      "css": ".ds-btn-validation { min-height: 40px; padding: 0 22px; border: 0; color: #fffdf7; background: #bd2d37; font: 800 13px/1.2 \"Avenir Next\", Avenir, \"PingFang SC\", sans-serif; letter-spacing: .04em; cursor: pointer; clip-path: polygon(8px 0,calc(100% - 8px) 0,100% 8px,100% calc(100% - 8px),calc(100% - 8px) 100%,8px 100%,0 calc(100% - 8px),0 8px); transition: background-color 160ms ease-out; } .ds-btn-validation:hover { background: #8f1f29; } .ds-btn-validation:focus-visible { outline: 3px solid rgba(189,45,55,.35); outline-offset: 3px; } .ds-btn-validation:active { filter: brightness(.92); }"
+    },
+    {
+      "name": "Risk Action",
+      "kind": "button",
+      "refersTo": "button-risk",
+      "description": "Full-width action attached to the carbon-copy risk receipt.",
+      "html": "<a class=\"ds-btn-risk\" href=\"#\">查看近两年回测</a>",
+      "css": ".ds-btn-risk { display: inline-flex; width: 100%; min-height: 40px; align-items: center; justify-content: center; padding: 0 22px; color: #fffdf7; background: #39256f; font: 800 13px/1.2 \"Avenir Next\", Avenir, \"PingFang SC\", sans-serif; letter-spacing: .04em; text-decoration: none; clip-path: polygon(8px 0,calc(100% - 8px) 0,100% 8px,100% calc(100% - 8px),calc(100% - 8px) 100%,8px 100%,0 calc(100% - 8px),0 8px); transition: background-color 160ms ease-out; } .ds-btn-risk:hover { background: #26174f; } .ds-btn-risk:focus-visible { outline: 3px solid rgba(189,45,55,.35); outline-offset: 3px; } .ds-btn-risk:active { filter: brightness(.92); }"
+    },
+    {
+      "name": "Ticket Input",
+      "kind": "input",
+      "refersTo": "input-ticket",
+      "description": "Ruled, borderless field for symbols and quantitative inputs.",
+      "html": "<label class=\"ds-field\"><span>A股 / 场内基金代码</span><input value=\"600519\" aria-label=\"A股 / 场内基金代码\"></label>",
+      "css": ".ds-field { display: grid; gap: 7px; color: #647087; font: 750 11px/1.5 \"Avenir Next\", Avenir, \"PingFang SC\", sans-serif; letter-spacing: .08em; } .ds-field input { width: 100%; height: 34px; padding: 0; border: 0; border-bottom: 1px solid rgba(13,27,61,.4); outline: 0; color: #0d1b3d; background: transparent; font: 750 20px/1 \"Avenir Next\", Avenir, sans-serif; font-variant-numeric: tabular-nums; } .ds-field input:hover { border-bottom-color: #0d1b3d; } .ds-field input:focus-visible { outline: 3px solid rgba(189,45,55,.35); outline-offset: 3px; }"
+    },
+    {
+      "name": "Verdict Coupon",
+      "kind": "card",
+      "refersTo": "coupon-verdict",
+      "description": "Master paper coupon carrying stock identity, verdict, stamp, and score.",
+      "html": "<article class=\"ds-verdict\"><span class=\"ds-verdict-label\">当前签发结论</span><strong>待补充</strong><span class=\"ds-verdict-stamp\">待确认 / PENDING</span></article>",
+      "css": ".ds-verdict { position: relative; min-width: 300px; padding: 32px; border: 1px solid rgba(13,27,61,.52); color: #111a2d; background: #f7f4ed; font-family: \"Avenir Next\", Avenir, \"PingFang SC\", sans-serif; box-shadow: 0 22px 44px -34px rgba(5,15,38,.9); clip-path: polygon(12px 0,calc(100% - 12px) 0,100% 12px,100% calc(100% - 12px),calc(100% - 12px) 100%,12px 100%,0 calc(100% - 12px),0 12px); } .ds-verdict-label { display: block; color: #647087; font-size: 11px; font-weight: 750; } .ds-verdict strong { display: block; margin-top: 5px; color: #8f1f29; font-size: 44px; line-height: 1; letter-spacing: -.04em; } .ds-verdict-stamp { position: absolute; right: 28px; bottom: 30px; padding: 9px 13px 8px; border: 3px double #bd2d37; color: #bd2d37; font-size: 11px; font-weight: 900; letter-spacing: .12em; transform: rotate(-7deg); } .ds-verdict:hover { border-color: rgba(13,27,61,.7); } .ds-verdict:focus-within { outline: 3px solid rgba(189,45,55,.35); outline-offset: 3px; }"
+    },
+    {
+      "name": "Risk Receipt",
+      "kind": "card",
+      "refersTo": "coupon-risk",
+      "description": "Carbon-copy paper reserved for stop, risk, and position output.",
+      "html": "<aside class=\"ds-receipt\"><span>结构止损</span><strong>¥148.20</strong><hr><span>计划最大亏损</span><b>¥1,000.00</b></aside>",
+      "css": ".ds-receipt { min-width: 260px; padding: 24px 22px; border: 1px solid rgba(57,37,111,.62); color: #39256f; background: repeating-linear-gradient(-3deg,transparent 0 6px,rgba(57,37,111,.055) 6px 7px),#d8c9e8; font-family: \"Avenir Next\", Avenir, \"PingFang SC\", sans-serif; clip-path: polygon(12px 0,calc(100% - 12px) 0,100% 12px,100% calc(100% - 12px),calc(100% - 12px) 100%,12px 100%,0 calc(100% - 12px),0 12px); } .ds-receipt span { display: block; font-size: 11px; font-weight: 800; opacity: .74; } .ds-receipt strong { display: block; margin-top: 5px; font: 850 52px/.95 \"DIN Condensed\", \"Arial Narrow\", sans-serif; font-variant-numeric: tabular-nums; } .ds-receipt b { display: block; margin-top: 4px; font-size: 20px; font-variant-numeric: tabular-nums; } .ds-receipt hr { margin: 19px 0; border: 0; border-top: 1px dashed rgba(57,37,111,.45); } .ds-receipt:hover { border-color: #39256f; } .ds-receipt:focus-within { outline: 3px solid rgba(189,45,55,.35); outline-offset: 3px; }"
+    },
+    {
+      "name": "Validation Stamp",
+      "kind": "custom",
+      "description": "Explicit pending, void, or valid mark that re-stamps the verdict.",
+      "html": "<span class=\"ds-stamp ds-stamp-pending\">待确认 / PENDING</span>",
+      "css": ".ds-stamp { display: inline-block; max-width: 140px; padding: 9px 13px 8px; border: 3px double currentColor; color: #bd2d37; font: 900 12px/1.25 \"Avenir Next\", Avenir, sans-serif; letter-spacing: .12em; text-align: center; text-transform: uppercase; transform: rotate(-7deg); } .ds-stamp:hover { filter: saturate(1.15); } .ds-stamp:focus-visible { outline: 3px solid rgba(189,45,55,.35); outline-offset: 3px; } .ds-stamp:active { transform: rotate(-7deg) scale(.98); } .ds-stamp-valid { color: #246d59; transform: rotate(-4deg); }"
+    },
+    {
+      "name": "Confirmation Row",
+      "kind": "custom",
+      "description": "Ruled user-confirmation choice with visible consequence copy.",
+      "html": "<label class=\"ds-option\"><input type=\"radio\" checked><span><strong>按计划执行</strong><small>继续候选评估</small></span></label>",
+      "css": ".ds-option { display: grid; min-height: 42px; grid-template-columns: 16px 1fr; gap: 9px; align-items: start; padding: 8px 9px; border: 1px solid #bd2d37; color: #111a2d; background: rgba(189,45,55,.07); font-family: \"Avenir Next\", Avenir, \"PingFang SC\", sans-serif; cursor: pointer; } .ds-option input { width: 15px; height: 15px; margin: 2px 0 0; accent-color: #bd2d37; } .ds-option strong { display: block; font-size: 11px; font-weight: 800; } .ds-option small { display: block; margin-top: 2px; color: #647087; font-size: 9px; line-height: 1.45; } .ds-option:hover { border-color: #8f1f29; } .ds-option:has(input:focus-visible) { outline: 3px solid rgba(189,45,55,.35); outline-offset: 3px; }"
+    },
+    {
+      "name": "Score Disclosure Coupon",
+      "kind": "custom",
+      "description": "Expandable paper strip for score provenance and rule details.",
+      "html": "<details class=\"ds-score\"><summary><span><strong>趋势结构</strong><small>通过 4 · 部分 1 · 自动行情</small></span><b>24 / 30</b><i></i></summary><div>数据日期：2026-08-24 · 已判定 30 / 30 分</div></details>",
+      "css": ".ds-score { border: 1px solid rgba(13,27,61,.42); color: #111a2d; background: #f7f4ed; font-family: \"Avenir Next\", Avenir, \"PingFang SC\", sans-serif; clip-path: polygon(9px 0,calc(100% - 9px) 0,100% 9px,100% calc(100% - 9px),calc(100% - 9px) 100%,9px 100%,0 calc(100% - 9px),0 9px); } .ds-score summary { display: grid; grid-template-columns: 1fr auto 18px; gap: 16px; align-items: center; padding: 18px 22px; list-style: none; cursor: pointer; } .ds-score strong { display: block; color: #0d1b3d; font-size: 14px; font-weight: 850; } .ds-score small { display: block; margin-top: 5px; color: #647087; font-size: 9px; } .ds-score b { color: #39256f; font: 850 24px/1 \"DIN Condensed\", \"Arial Narrow\", sans-serif; font-variant-numeric: tabular-nums; } .ds-score i { position: relative; width: 18px; height: 18px; } .ds-score i::before,.ds-score i::after { position: absolute; top: 8px; left: 3px; width: 12px; height: 1.5px; content: \"\"; background: #0d1b3d; transition: transform 160ms ease-out; } .ds-score i::after { transform: rotate(90deg); } .ds-score[open] i::after { transform: rotate(0); } .ds-score div { padding: 16px 22px 20px; border-top: 1px dashed rgba(13,27,61,.35); color: #647087; font-size: 10px; line-height: 1.7; } .ds-score summary:hover { background: rgba(13,27,61,.025); } .ds-score summary:focus-visible { outline: 3px solid rgba(189,45,55,.35); outline-offset: 3px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Traceable Verdict Ticket",
+    "overview": "Glacier Signal turns a stock evaluation into an issued trading document: carrier navy holds the set, paper-white coupons carry the verdict, and a carbon-purple receipt records risk and position outputs. The mood is procedural, restrained, and accountable. Every result should feel stamped, attached, and auditable rather than summarized in a generic analytics dashboard.\n\nThe system favors dense but ordered information, visible provenance, and state changes that leave a legible trace. Paper grain, ruled lines, perforations, clipped corners, carbon numerals, and validation marks provide character without weakening Chinese body-text clarity. Red marks action, failure, pending issuance, and cancellation; green is reserved for completed validation.",
+    "keyCharacteristics": [
+      "Ticket-book composition held by deep carrier navy",
+      "Warm paper coupons and a distinct carbon-copy risk surface",
+      "Clipped corners, dashed tears, perforation holes, and ruled rows",
+      "Condensed, tabular numerals for scores, prices, and codes",
+      "Explicit pass, fail, and pending words or symbols alongside color",
+      "Verdict-first hierarchy with risk output visibly attached"
+    ],
+    "rules": [
+      { "name": "The Carbon Boundary Rule", "body": "Carbon purple belongs to risk, stop, position, and their attached action; do not spread it across ordinary content.", "section": "colors" },
+      { "name": "The Ink Has Meaning Rule", "body": "Red, green, and amber are operational states, not decorative accents, and color never stands alone.", "section": "colors" },
+      { "name": "The Numerical Authority Rule", "body": "Prices, scores, dates, codes, shares, and percentages use tabular numerals; the largest type is reserved for the one value that decides the current step.", "section": "typography" },
+      { "name": "The Attached Sequence Rule", "body": "Responsive changes may reorder and compress coupons, but they must preserve the task sequence and the visual sense that checks, verdict, and risk receipt belong to one issued set.", "section": "layout" },
+      { "name": "The Printed-First Rule", "body": "Texture, borders, and overlapping stock establish depth before shadow; never turn coupons into glossy floating cards.", "section": "elevation" },
+      { "name": "The Cut, Do Not Round Rule", "body": "Use clipped corners for tickets, buttons, headers, and coupons; reserve true circles for compact status or selection marks.", "section": "shapes" }
+    ],
+    "dos": [
+      "Do lead with the current verdict and any blocking condition before score detail.",
+      "Do preserve the carrier, coupon, carbon-copy, perforation, and validation-mark vocabulary across screen sizes.",
+      "Do pair red, green, and amber with text or a distinct symbol.",
+      "Do keep quantitative values tabular and keep risk output on carbon purple.",
+      "Do honor reduced-motion preferences and maintain visible keyboard focus."
+    ],
+    "donts": [
+      "Don't reinterpret the evaluation as a grid of interchangeable rounded metric cards.",
+      "Don't use purple as a general accent outside the risk receipt and its quantitative links.",
+      "Don't let a score visually erase a failed, void, or pending condition.",
+      "Don't detach the backtest action from the risk receipt.",
+      "Don't compress mobile into a horizontal rail or allow horizontal scrolling."
+    ]
+  }
+}

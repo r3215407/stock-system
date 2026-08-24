@@ -2,9 +2,9 @@ import Link from "next/link";
 
 import EvaluationSearch from "@/components/EvaluationSearch";
 import EvaluationWorkspace from "@/components/EvaluationWorkspace";
-import BrandLogo from "@/components/BrandLogo";
 import { modelVersion, normalizeSymbol, type MarketDataSnapshot } from "@/lib/evaluation";
 import { getMarketDataSnapshot, MarketDataError } from "@/lib/market-data";
+import styles from "./evaluate.module.css";
 
 type EvaluatePageProps = {
   searchParams: Promise<{ symbol?: string | string[]; signalDate?: string | string[] }>;
@@ -39,67 +39,52 @@ export default async function EvaluatePage({ searchParams }: EvaluatePageProps) 
   }
 
   return (
-    <main className="min-h-screen text-[#102C3A]">
-      <header className="fixed inset-x-4 top-4 z-50 mx-auto h-14 max-w-[720px] rounded-full border border-[#102C3A]/15 bg-[#F7F8F6]/80 shadow-[0_8px_30px_-12px_rgba(20,30,80,0.18)] backdrop-blur-xl">
-        <div className="mx-auto flex h-full w-full items-center justify-between px-4 sm:px-5">
-          <BrandLogo />
-          <nav aria-label="评分页导航" className="flex items-center gap-2 text-[13px] font-medium text-[#476775]">
-            <span className="hidden px-3 sm:inline">模型 {modelVersion}</span>
-          </nav>
-        </div>
-      </header>
-
-      <div className="mx-auto w-full max-w-7xl px-4 pb-24 pt-32 sm:px-5 lg:px-8 lg:pt-32">
-        <div className="flex flex-col justify-between gap-8 lg:flex-row lg:items-end">
-          <div className="max-w-[720px]">
-            <p className="inline-flex rounded-full border border-[#102C3A]/15 bg-white/60 px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.12em] text-[#718C98]">Evaluation workspace</p>
-            <h1 className="mt-6 text-[38px] font-[600] leading-[1.02] tracking-[-0.045em] min-[360px]:text-[40px] sm:text-[54px] lg:text-[60px]">
-              趋势回调<em className="block text-[#5661D9] sm:inline">转强评分</em>
+    <main className={styles.page}>
+      <div className={styles.shell}>
+        <header className={styles.utilityBar}>
+          <div className={styles.utilityMain}>
+            <Link className={styles.backLink} href="/">← 返回今日选股</Link>
+            <h1 className={styles.title}>
+              趋势回调<span className={styles.titleAccent}>转强评估票</span>
             </h1>
-            <p className="mt-4 max-w-[520px] text-sm leading-6 text-[#476775]">
-              技术指标占90分，市场环境自动计算10分；风险与执行作为硬性过滤，不能被高分覆盖。
+            <p className={styles.description}>
+              股票 {modelVersion}（当前）依次核验硬性过滤、技术评分与账户风险；任何阻断条件都会保留在票面，不被总分覆盖。
             </p>
           </div>
-          <p className="max-w-[280px] text-[12px] leading-[18px] text-[#718C98] lg:text-right">
-            数据默认使用最新完整交易日。盘中不会把未完成日线计入候选评估。
+          <p className={styles.utilityMeta}>
+            <strong>完整日线签发</strong>
+            默认使用最新完整交易日。盘中未完成日线不会计入本次候选评估。
           </p>
-        </div>
+        </header>
 
-        <div className="mt-10 rounded-[20px] border border-[#102C3A]/15 bg-white/70 p-4 sm:p-6">
-          <EvaluationSearch defaultValue={symbol.raw} error={error} compact />
-        </div>
+        <EvaluationSearch defaultValue={symbol.raw} error={error} compact variant="ticket" />
 
         {!hasQuery ? (
-          <section className="py-24" aria-labelledby="empty-title">
-            <p className="font-mono text-[11px] text-[#718C98]">01 / START</p>
-            <h2 className="mt-4 max-w-[560px] text-[24px] font-semibold leading-8 tracking-[-0.015em]" id="empty-title">
+          <section className={styles.emptyTicket} aria-labelledby="empty-title">
+            <h2 id="empty-title">
               输入一只A股或场内基金，开始固定顺序的入场检查。
             </h2>
-            <p className="mt-4 max-w-[520px] text-sm leading-6 text-[#476775]">
-              页面将依次展开股票摘要、硬性过滤、用户确认、评分明细和账户净值输入。
+            <p>
+              票面将依次签发标的摘要、硬性过滤、用户确认、评分明细与账户风险回执。
             </p>
           </section>
         ) : null}
 
         {symbol.valid && dataError ? (
-          <section className="py-20" aria-labelledby="data-unavailable-title">
-            <div className="max-w-[720px] border-l-2 border-[#B44D5C] pl-5">
-              <p className="text-[12px] font-medium text-[#B44D5C]">行情读取未完成</p>
-              <h2 className="mt-2 text-[24px] font-semibold leading-8" id="data-unavailable-title">
+          <section className={styles.errorTicket} aria-labelledby="data-unavailable-title">
+              <h2 id="data-unavailable-title">
                 无法完成 {symbol.normalized} 的真实行情评估。
               </h2>
-              <p className="mt-4 text-sm leading-6 text-[#476775]">
-                {dataError} 页面没有使用演示数据或缓存结果替代本次请求。
+              <p>
+                {dataError} 本次票据没有使用演示数据或缓存结果替代真实请求。
               </p>
-              <Link className="mt-5 inline-flex min-h-11 items-center text-sm font-semibold text-[#1E5A70] underline decoration-[#A7C8D7] underline-offset-4" href={`/evaluate?symbol=${encodeURIComponent(symbol.normalized)}${signalDate ? `&signalDate=${encodeURIComponent(signalDate)}` : ""}`}>
+              <Link className={styles.actionLink} href={`/evaluate?symbol=${encodeURIComponent(symbol.normalized)}${signalDate ? `&signalDate=${encodeURIComponent(signalDate)}` : ""}`}>
                 重新读取行情
               </Link>
-            </div>
           </section>
         ) : null}
 
         {snapshot ? <EvaluationWorkspace snapshot={snapshot} /> : null}
-
       </div>
     </main>
   );

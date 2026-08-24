@@ -6,6 +6,7 @@ import {
   getMa60RelationshipScore,
   getPullbackAmplitudeScore,
   getStopDistanceRiskAdjustment,
+  normalizeSymbol,
 } from "../lib/evaluation.ts";
 
 test("回调幅度使用左闭右开区间", () => {
@@ -15,6 +16,11 @@ test("回调幅度使用左闭右开区间", () => {
   assert.equal(getPullbackAmplitudeScore(0.06), 5);
   assert.equal(getPullbackAmplitudeScore(0.08), 3);
   assert.equal(getPullbackAmplitudeScore(0.1), 0);
+});
+
+test("股票代码标准化同时接受六位代码和带市场后缀代码", () => {
+  assert.deepEqual(normalizeSymbol("600519"), { raw: "600519", normalized: "600519.SH", valid: true });
+  assert.deepEqual(normalizeSymbol("600519.SH"), { raw: "600519.SH", normalized: "600519.SH", valid: true });
 });
 
 test("MA20距离在3%和5%边界正确计分", () => {
