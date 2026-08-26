@@ -538,14 +538,16 @@
   justify-content: space-between;
   gap: 18px;
   margin-top: 24px;
-  padding: 18px 20px;
+  padding: 18px 0;
   border-block: 1px dashed rgba(13, 27, 61, 0.45);
 }
 
 .verdictLabel {
+  display: block;
   color: var(--ticket-muted);
-  font-size: 11px;
-  font-weight: 750;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.5;
 }
 
 .verdictText {
@@ -580,40 +582,60 @@
 
 .scoreRow {
   display: flex;
-  align-items: flex-end;
+  align-items: end;
   justify-content: space-between;
   gap: 18px;
   margin-top: 22px;
 }
 
+.scoreBlock {
+  display: grid;
+  min-width: 0;
+  gap: 14px;
+}
+
 .scoreLabel {
+  display: block;
   color: var(--ticket-muted);
   font-size: 12px;
   font-weight: 800;
+  line-height: 1.5;
 }
 
 .scoreValue {
-  margin-top: 4px;
+  display: flex;
+  align-items: flex-end;
+  gap: 9px;
   color: var(--ticket-purple-ink);
   font-family: var(--font-ticket), "Arial Narrow", sans-serif;
   font-size: clamp(68px, 9vw, 118px);
   font-weight: 800;
   letter-spacing: -0.04em;
-  line-height: 0.78;
+  line-height: 0.86;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .scoreValue small {
-  margin-left: 8px;
+  padding-bottom: 0.12em;
   color: var(--ticket-navy);
   font-size: 28px;
   letter-spacing: 0;
+  line-height: 1;
+}
+
+.scoreMeta {
+  align-self: end;
+  flex: none;
+  margin: 0;
+  padding-bottom: 4px;
+  line-height: 1.55;
 }
 
 .priceGrid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin-top: 28px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-top: 14px;
   border-top: 1px solid rgba(13, 27, 61, 0.3);
 }
 
@@ -629,12 +651,27 @@
   font-weight: 700;
 }
 
+.priceGrid dt small {
+  display: block;
+  margin-top: 2px;
+  font-size: 8px;
+  font-weight: 500;
+}
+
 .priceGrid dd {
   margin: 3px 0 0;
   color: var(--ticket-navy);
   font-size: 16px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
+}
+
+.priceGrid dd.pricePositive {
+  color: var(--ticket-red-dark);
+}
+
+.priceGrid dd.priceNegative {
+  color: var(--ticket-green);
 }
 
 .receiptHeader {
@@ -749,6 +786,13 @@
   width: 100%;
   background: var(--ticket-purple-ink);
 }
+
+.receiptActions { display: grid; gap: 8px; }
+.receiptActions button { border: 0; cursor: pointer; }
+.receiptActions button:disabled { cursor: not-allowed; opacity: .45; }
+.secondaryAction { display: grid; min-height: 42px; place-items: center; border: 1px solid rgba(57,37,111,.45); color: var(--ticket-purple-ink); font-size: 11px; font-weight: 800; text-decoration: none; }
+.addFeedback { min-height: 17px; margin: 8px 0 0; color: rgba(57,37,111,.78); font-size: 9px; line-height: 1.5; overflow-wrap: anywhere; }
+.addFeedback a { color: inherit; font-weight: 800; }
 
 .actionLink:hover {
   background: #26174f;
@@ -1195,17 +1239,15 @@
     display: block;
   }
 
-  .scoreValue {
-    margin-top: 12px;
+  .scoreMeta {
+    margin-top: 14px;
   }
 
   .priceGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .priceGrid div:last-child {
-    grid-column: 1 / -1;
-  }
+  .priceGrid div:last-child { grid-column: auto; }
 }
 
 @media (prefers-reduced-motion: no-preference) {

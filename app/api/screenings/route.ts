@@ -1,5 +1,3 @@
-import { after } from "next/server";
-
 import { prepareScreeningJob } from "@/lib/screening-jobs";
 import { getStrategy } from "@/lib/strategies";
 
@@ -17,9 +15,8 @@ export async function POST(request: Request) {
   const scanDate = typeof body.scanDate === "string" && body.scanDate ? body.scanDate : null;
   if (scanDate && !/^\d{4}-\d{2}-\d{2}$/.test(scanDate)) return Response.json({ error: { code: "INVALID_DATE", message: "扫描日期格式应为 YYYY-MM-DD。" } }, { status: 400 });
   try {
-    const { job, execute } = await prepareScreeningJob(strategy, scanDate);
-    if (execute) after(execute);
-    return Response.json({ data: job }, { status: execute ? 202 : 200, headers: { "Cache-Control": "no-store" } });
+    const { job, created } = await prepareScreeningJob(strategy, scanDate);
+    return Response.json({ data: job }, { status: job?.status === "running" || created ? 202 : 200, headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return Response.json({ error: { code: "SCREENING_SETUP_FAILED", message: error instanceof Error ? error.message : "扫描任务初始化失败。" } }, { status: 503 });
   }

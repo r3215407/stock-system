@@ -2,64 +2,59 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 
-import { getScorePositionRule, getStopDistanceRiskAdjustment } from "@/lib/evaluation";
+import { getStopDistanceRiskAdjustment } from "@/lib/evaluation";
+import { isChinaTradingDay } from "@/lib/etf-rotation";
 import { buildAutomaticEvaluation, buildMarketEnvironmentModule, cleanBars, fetchMarketBars, shanghaiClock } from "@/lib/market-data";
-import { isRedisConfigured, redisDelete, redisGet, redisSet } from "@/lib/redis-store";
-import { rankScreeningResults, type ScreeningCandidate, type ScreeningJob } from "@/lib/screening";
-import type { StrategyDefinition } from "@/lib/strategies";
+import {
+  cancelScreeningJobRow,
+  claimScreeningInitialization,
+  claimScreeningBatch,
+  completeScreeningBatch,
+  completeScreeningJob,
+  createScreeningJobRow,
+  deleteExpiredScreeningJobs,
+  failScreeningJob,
+  findActiveScreeningJob,
+  findFinalizableScreeningJobs,
+  getClaimedScreeningBatch,
+  findReusableScreeningJob,
+  getScreeningJobRow,
+  initializeScreeningBatches,
+  loadScreeningAggregation,
+  pauseScreeningBatch,
+  releaseScreeningInitialization,
+  releaseScreeningBatch,
+  resumePausedScreeningJob,
+  retryFailedScreeningJob,
+  type ClaimedScreeningInitialization,
+  type ScreeningBatchFailure,
+  type ScreeningBatchSecurity,
+} from "@/lib/screening-db";
+import {
+  HTTP_501_PAUSE_THRESHOLD,
+  describeScreeningFailure,
+  isChiNextCode,
+  rankCandidateResults,
+  rankScreeningResults,
+  sanitizeScreeningFailure,
+  type BrowserScreeningWork,
+  type ScreeningCandidate,
+} from "@/lib/screening";
+import { getStrategy, type StrategyDefinition } from "@/lib/strategies";
 
-const CACHE_TTL_SECONDS = 3 * 24 * 60 * 60;
-const JOB_TTL_MS = CACHE_TTL_SECONDS * 1000;
 const UNIVERSE_API_HOSTS = ["push2.eastmoney.com", "82.push2.eastmoney.com"] as const;
 const UNIVERSE_FETCH_ATTEMPTS = 2;
-type InternalJob = ScreeningJob & { cancelled?: boolean };
-const jobGlobal = globalThis as typeof globalThis & { glacierScreeningJobs?: Map<string, InternalJob> };
-const jobs = jobGlobal.glacierScreeningJobs ??= new Map<string, InternalJob>();
-const persistQueues = new Map<string, Promise<void>>();
+const BATCH_SIZE = 32;
+const DEFAULT_SECURITY_WORKERS = 6;
+const configuredSecurityWorkers = Number(process.env.SCREENING_SECURITY_WORKERS ?? DEFAULT_SECURITY_WORKERS);
+const SECURITY_WORKERS = Number.isFinite(configuredSecurityWorkers)
+  ? Math.min(6, Math.max(1, Math.floor(configuredSecurityWorkers)))
+  : DEFAULT_SECURITY_WORKERS;
+const PROVIDER = "新浪财经/东方财富证券池 + 腾讯证券日线（浏览器直连/服务端兼容）";
 
-type UniverseSecurity = { symbol: string; code: string; name: string; market: "上海" | "深圳"; latestAmount: number; industry: string };
+type UniverseSecurity = ScreeningBatchSecurity;
 type EastmoneyUniverse = { data?: { total?: number; diff?: Array<{ f12?: string; f13?: number; f14?: string; f6?: number; f100?: string }> } };
 type SinaUniverseItem = { symbol?: string; code?: string; name?: string; amount?: number | string };
-
-function cleanupJobs() {
-  const now = Date.now();
-  for (const [id, job] of jobs) if (new Date(job.expiresAt).getTime() <= now) jobs.delete(id);
-}
-
-function jobKey(jobId: string) {
-  return `glacier:screening:job:${jobId}`;
-}
-
-function resultKey(strategy: StrategyDefinition, requestedDate: string | null) {
-  return [
-    "glacier:screening:result",
-    strategy.strategyId,
-    strategy.strategyVersion,
-    strategy.parameterVersion,
-    requestedDate ?? "latest",
-  ].join(":");
-}
-
-function serializeJob(job: InternalJob) {
-  const { cancelled: _cancelled, ...snapshot } = job;
-  return JSON.stringify(snapshot);
-}
-
-function persistJob(job: InternalJob) {
-  if (!isRedisConfigured()) return Promise.resolve();
-  const previous = persistQueues.get(job.jobId) ?? Promise.resolve();
-  const next = previous.catch(() => undefined).then(() => redisSet(jobKey(job.jobId), serializeJob(job), CACHE_TTL_SECONDS));
-  persistQueues.set(job.jobId, next);
-  return next.finally(() => {
-    if (persistQueues.get(job.jobId) === next) persistQueues.delete(job.jobId);
-  });
-}
-
-function parseJob(value: string | null) {
-  if (!value) return null;
-  try { return JSON.parse(value) as ScreeningJob; }
-  catch { return null; }
-}
 
 function errorMessage(error: unknown) {
   return error instanceof Error && error.message ? error.message : "未知网络错误";
@@ -221,130 +216,349 @@ async function evaluateSecurity(security: UniverseSecurity, strategy: StrategyDe
   } satisfies ScreeningCandidate;
 }
 
-async function runJob(job: InternalJob, strategy: StrategyDefinition) {
-  const startedAt = Date.now();
-  const exclusions = new Map<string, number>();
+async function finalizeScreeningJob(jobId: string, strategy: StrategyDefinition) {
+  const aggregation = await loadScreeningAggregation(jobId);
+  if (!aggregation.job || aggregation.batches.some((batch) => batch.status === "pending" || batch.status === "running")) return false;
+  const results = aggregation.batches.flatMap((batch) => batch.status === "completed" ? batch.results : []);
+  const exclusionCounts = new Map(Object.entries(aggregation.job.initialExclusions));
+  for (const batch of aggregation.batches) {
+    for (const [reason, count] of Object.entries(batch.exclusions)) {
+      exclusionCounts.set(reason, (exclusionCounts.get(reason) ?? 0) + count);
+    }
+  }
+  const failedBatchCount = aggregation.batches.filter((batch) => batch.status === "failed").length;
+  const exclusions = [...exclusionCounts].map(([reason, count]) => ({ reason, count })).sort((a, b) => b.count - a.count);
+  await completeScreeningJob({
+    jobId,
+    candidates: rankScreeningResults(results, strategy.outputConfig.topN),
+    candidateTop10: rankCandidateResults(results, strategy.outputConfig.topN),
+    exclusions,
+    incomplete: failedBatchCount > 0 || aggregation.job.afterBasicFilter === 0
+      || aggregation.job.failedCount / Math.max(1, aggregation.job.afterBasicFilter) > 0.05,
+  });
+  return true;
+}
+
+export async function prepareScreeningJob(
+  strategy: StrategyDefinition,
+  requestedDate: string | null,
+  options: { idempotencyKey?: string; reuseCompleted?: boolean } = {},
+) {
+  const clock = shanghaiClock();
+  const scanDate = requestedDate ?? clock.date;
+  if (!isChinaTradingDay(scanDate)) throw new Error(`${scanDate} 不是中国 A 股交易日，未创建全市场扫描任务。`);
+  await deleteExpiredScreeningJobs();
+  const active = await findActiveScreeningJob(
+    strategy.strategyId,
+    strategy.strategyVersion,
+    strategy.parameterVersion,
+    requestedDate,
+    clock.date,
+  );
+  if (active) return { job: active, created: false as const };
+  if (options.reuseCompleted !== false) {
+    const cached = await findReusableScreeningJob(
+      strategy.strategyId,
+      strategy.strategyVersion,
+      strategy.parameterVersion,
+      requestedDate,
+      clock.date,
+    );
+    if (cached?.failedCount) {
+      const retrying = await retryFailedScreeningJob(cached.jobId);
+      if (retrying) return { job: retrying, created: false as const, retrying: true as const };
+    }
+    if (cached) return { job: cached, created: false as const };
+  }
+  const created = await createScreeningJobRow({
+    idempotencyKey: options.idempotencyKey ?? `manual:${randomUUID()}`,
+    strategyId: strategy.strategyId,
+    strategyVersion: strategy.strategyVersion,
+    parameterVersion: strategy.parameterVersion,
+    requestedDate,
+    businessDate: clock.date,
+    provider: PROVIDER,
+  });
+  if (!created.created) return { job: await getScreeningJobRow(created.jobId), created: false as const };
+  return { job: await getScreeningJobRow(created.jobId), created: true as const };
+}
+
+async function initializeClaimedScreeningJob(initialization: ClaimedScreeningInitialization) {
+  const strategy = getStrategy(initialization.strategyId, initialization.strategyVersion);
+  if (!strategy || strategy.status === "disabled") {
+    const error = new Error("初始化任务对应的策略不存在或已停用。");
+    await releaseScreeningInitialization(initialization, error);
+    await failScreeningJob(initialization.jobId, error);
+    return { processed: false as const, reason: "STRATEGY_NOT_FOUND" as const, jobId: initialization.jobId };
+  }
   try {
-    job.stage = "获取证券池";
-    await persistJob(job);
+    const exclusions = new Map<string, number>();
     const [universe, benchmark] = await Promise.all([
       fetchUniverse(),
       fetchMarketBars("000985.SH", 320).catch((error: unknown) => {
         throw new Error(`中证全指基准行情获取失败：${errorMessage(error)}`);
       }),
     ]);
-    job.universeTotal = universe.length;
-    job.stage = "基础过滤";
     const base = universe.filter((item) => {
+      if (isChiNextCode(item.code)) { exclusions.set("创业板（暂不扫描）", (exclusions.get("创业板（暂不扫描）") ?? 0) + 1); return false; }
       if (/^(?:ST|\*ST|退)/i.test(item.name)) { exclusions.set("ST / 退市风险", (exclusions.get("ST / 退市风险") ?? 0) + 1); return false; }
       if (item.latestAmount <= 0) { exclusions.set("停牌或无成交", (exclusions.get("停牌或无成交") ?? 0) + 1); return false; }
       return true;
     });
-    job.afterBasicFilter = base.length;
-    await persistJob(job);
     const benchmarkBars = cleanBars(benchmark.bars);
-    const benchmarkIndex = latestCompleteIndex(benchmarkBars, job.requestedDate);
+    const benchmarkIndex = latestCompleteIndex(benchmarkBars, initialization.requestedDate);
     if (benchmarkIndex < 25) throw new Error("中证全指数据不足");
     const environmentScore = buildMarketEnvironmentModule(benchmarkBars.slice(0, benchmarkIndex + 1)).earned;
-    job.stage = "读取日线";
-    const results: ScreeningCandidate[] = [];
+    await initializeScreeningBatches({
+      jobId: initialization.jobId, universeTotal: universe.length, securities: base, environmentScore,
+      initialExclusions: Object.fromEntries(exclusions), batchSize: BATCH_SIZE,
+    });
+    if (base.length === 0) await finalizeScreeningJob(initialization.jobId, strategy);
+    return { processed: true as const, kind: "INITIALIZATION" as const, jobId: initialization.jobId, batchesCreated: Math.ceil(base.length / BATCH_SIZE) };
+  } catch (error) {
+    await releaseScreeningInitialization(initialization, error);
+    throw error;
+  }
+}
+
+export async function processNextScreeningWork(jobId?: string) {
+  const initialization = await claimScreeningInitialization(jobId);
+  if (initialization) return initializeClaimedScreeningJob(initialization);
+  return processNextScreeningBatch(jobId);
+}
+
+export async function processNextScreeningBatch(jobId?: string) {
+  const batch = await claimScreeningBatch(jobId);
+  if (!batch) {
+    const ready = await findFinalizableScreeningJobs(jobId);
+    for (const job of ready) {
+      const strategy = getStrategy(job.strategyId, job.strategyVersion);
+      if (strategy) await finalizeScreeningJob(job.jobId, strategy);
+      else await failScreeningJob(job.jobId, new Error("扫描任务对应的策略不存在。"));
+    }
+    return { processed: false as const, reason: "NO_PENDING_BATCH" as const, finalized: ready.length };
+  }
+  const strategy = getStrategy(batch.strategyId, batch.strategyVersion);
+  if (!strategy || strategy.status === "disabled") {
+    const error = new Error("扫描分片对应的策略不存在或已停用。");
+    await releaseScreeningBatch(batch, error);
+    await failScreeningJob(batch.jobId, error);
+    return { processed: false as const, reason: "STRATEGY_NOT_FOUND" as const, jobId: batch.jobId };
+  }
+  try {
+    const results: ScreeningCandidate[] = [...batch.previousResults];
+    const exclusions = new Map(Object.entries(batch.previousExclusions));
+    const failedSecurities: ScreeningBatchFailure[] = [];
     let cursor = 0;
-    const workers = Array.from({ length: Math.min(12, base.length) }, async () => {
-      while (cursor < base.length && !job.cancelled) {
-        const security = base[cursor++];
+    let dataDate: string | null = batch.previousDataDate;
+    const workers = Array.from({ length: Math.min(SECURITY_WORKERS, batch.payload.length) }, async () => {
+      while (cursor < batch.payload.length) {
+        const security = batch.payload[cursor++];
         try {
-          const result = await evaluateSecurity(security, strategy, job.requestedDate, environmentScore);
+          const result = await evaluateSecurity(security, strategy, batch.requestedDate, batch.environmentScore);
           results.push(result);
+          dataDate ??= result.signalDate;
           if (result.bucket === "excluded") exclusions.set(result.firstReason, (exclusions.get(result.firstReason) ?? 0) + 1);
-          job.scored += 1;
-          job.dataDate = job.dataDate ?? result.signalDate;
         } catch (error) {
           if (error instanceof Error && error.message.includes("历史日线不足250日")) {
             exclusions.set("上市不足250个交易日", (exclusions.get("上市不足250个交易日") ?? 0) + 1);
           } else {
-            job.failedCount += 1;
+            failedSecurities.push({ ...security, ...describeScreeningFailure(error) });
           }
-        } finally {
-          job.processed += 1;
-          job.elapsedMs = Date.now() - startedAt;
-          if (job.processed % 50 === 0) await persistJob(job);
         }
       }
     });
     await Promise.all(workers);
-    if (job.cancelled) { job.status = "cancelled"; job.stage = "已取消"; return; }
-    job.stage = "评分排名";
-    const topResults = rankScreeningResults(results, strategy.outputConfig.topN);
-    job.incomplete = job.universeTotal === 0 || job.failedCount / Math.max(1, job.afterBasicFilter) > 0.05;
-    job.candidates = topResults;
-    job.watch = rankScreeningResults(results.filter((item) => item.bucket === "watch"), 100);
-    job.exclusions = [...exclusions].map(([reason, count]) => ({ reason, count })).sort((a, b) => b.count - a.count);
-    job.status = "completed";
-    job.stage = "完成";
-    job.generatedAt = new Date().toISOString();
+    await completeScreeningBatch({
+      batchId: batch.batchId, jobId: batch.jobId, leaseToken: batch.leaseToken,
+      results, exclusions: Object.fromEntries(exclusions),
+      processed: batch.totalCount, scored: results.length, failedCount: failedSecurities.length,
+      failedSecurities, dataDate,
+    });
+    const completed = await finalizeScreeningJob(batch.jobId, strategy);
+    return { processed: true as const, jobId: batch.jobId, batchId: batch.batchId, completed };
   } catch (error) {
-    job.status = "failed"; job.stage = "失败"; job.error = error instanceof Error ? error.message : "扫描失败";
-  } finally {
-    job.elapsedMs = Date.now() - startedAt;
-    if (job.status === "completed") {
-      job.expiresAt = new Date(Date.now() + JOB_TTL_MS).toISOString();
-    }
-    await persistJob(job);
-    if (job.status === "completed" && isRedisConfigured()) {
-      await redisSet(resultKey(strategy, job.requestedDate), serializeJob(job), CACHE_TTL_SECONDS);
-    }
+    await releaseScreeningBatch(batch, error);
+    await finalizeScreeningJob(batch.jobId, strategy);
+    throw error;
   }
 }
 
-export async function prepareScreeningJob(strategy: StrategyDefinition, requestedDate: string | null) {
-  cleanupJobs();
-  if (process.env.VERCEL && !isRedisConfigured()) {
-    throw new Error("Vercel 环境未配置 Redis。请连接 Storage，或设置 REDIS_URL / KV_REST_API_URL 与 KV_REST_API_TOKEN。");
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function validSubmittedCandidate(value: unknown): value is ScreeningCandidate {
+  if (!value || typeof value !== "object") return false;
+  const item = value as Partial<ScreeningCandidate>;
+  return typeof item.symbol === "string"
+    && typeof item.code === "string"
+    && typeof item.name === "string"
+    && (item.market === "上海" || item.market === "深圳")
+    && typeof item.industry === "string"
+    && (item.bucket === "candidate" || item.bucket === "watch" || item.bucket === "excluded")
+    && typeof item.conclusion === "string"
+    && isFiniteNumber(item.score)
+    && isFiniteNumber(item.technicalScore)
+    && isFiniteNumber(item.strengthScore)
+    && isFiniteNumber(item.stopDistanceRate)
+    && isFiniteNumber(item.riskFactor)
+    && typeof item.riskLabel === "string"
+    && (item.pressureStatus === "breakout" || item.pressureStatus === "sufficient" || item.pressureStatus === "insufficient")
+    && isFiniteNumber(item.averageAmount20)
+    && typeof item.signalDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(item.signalDate)
+    && isFiniteNumber(item.entryPrice)
+    && isFiniteNumber(item.initialStopPrice)
+    && typeof item.firstReason === "string"
+    && typeof item.rankingReason === "string";
+}
+
+async function finalizeReadyScreeningJob(jobId: string) {
+  const ready = await findFinalizableScreeningJobs(jobId);
+  for (const job of ready) {
+    const strategy = getStrategy(job.strategyId, job.strategyVersion);
+    if (strategy) await finalizeScreeningJob(job.jobId, strategy);
+    else await failScreeningJob(job.jobId, new Error("扫描任务对应的策略不存在。"));
   }
-  if (isRedisConfigured()) {
-    const key = resultKey(strategy, requestedDate);
-    const cached = parseJob(await redisGet(key));
-    if (cached?.status === "completed") {
-      const job: InternalJob = { ...cached, cacheHit: true };
-      jobs.set(job.jobId, job);
-      await persistJob(job);
-      return { job, execute: null };
-    }
-    if (cached) await redisDelete(key);
+}
+
+export async function claimBrowserScreeningWork(jobId: string): Promise<BrowserScreeningWork> {
+  const initialization = await claimScreeningInitialization(jobId);
+  if (initialization) {
+    await initializeClaimedScreeningJob(initialization);
+    return { kind: "INITIALIZATION" };
   }
-  const now = Date.now();
-  const job: InternalJob = {
-    jobId: randomUUID(), status: "running", stage: "加载策略", strategyId: strategy.strategyId,
-    strategyVersion: strategy.strategyVersion, parameterVersion: strategy.parameterVersion, requestedDate,
-    dataDate: null, createdAt: new Date(now).toISOString(), generatedAt: null,
-    expiresAt: new Date(now + JOB_TTL_MS).toISOString(), processed: 0, universeTotal: 0,
-    afterBasicFilter: 0, scored: 0, failedCount: 0, elapsedMs: 0, provider: "新浪财经/东方财富证券池 + 腾讯证券/东方财富日线",
-    adjustment: "前复权", incomplete: false, error: null, candidates: [], watch: [], exclusions: [], cacheHit: false,
+  const batch = await claimScreeningBatch(jobId);
+  if (!batch) {
+    await finalizeReadyScreeningJob(jobId);
+    return { kind: "IDLE" };
+  }
+  return {
+    kind: "BATCH",
+    batchId: batch.batchId,
+    leaseToken: batch.leaseToken,
+    securities: batch.payload,
+    strategyId: batch.strategyId,
+    strategyVersion: batch.strategyVersion,
+    requestedDate: batch.requestedDate,
+    environmentScore: batch.environmentScore,
   };
-  jobs.set(job.jobId, job);
-  await persistJob(job);
-  return { job, execute: () => runJob(job, strategy) };
+}
+
+export async function submitBrowserScreeningWork(input: {
+  jobId: string;
+  batchId: string;
+  leaseToken: string;
+  results: unknown[];
+  failures: Array<{ symbol?: unknown; errorCode?: unknown; errorMessage?: unknown }>;
+  shortHistorySymbols: unknown[];
+  paused?: boolean;
+  unprocessedSymbols?: unknown[];
+  dataDate: string | null;
+}) {
+  const batch = await getClaimedScreeningBatch(input.jobId, input.batchId, input.leaseToken);
+  if (!batch) throw new Error("扫描分片不存在或租约已失效，请重新领取。");
+  const strategy = getStrategy(batch.strategyId, batch.strategyVersion);
+  if (!strategy || strategy.status === "disabled") throw new Error("扫描分片对应的策略不存在或已停用。");
+
+  const securities = new Map(batch.payload.map((security) => [security.symbol, security]));
+  const covered = new Set<string>();
+  function claimSymbol(symbol: unknown) {
+    if (typeof symbol !== "string" || !securities.has(symbol)) throw new Error("扫描结果包含不属于当前分片的股票。");
+    if (covered.has(symbol)) throw new Error(`扫描结果重复提交股票 ${symbol}。`);
+    covered.add(symbol);
+    return securities.get(symbol)!;
+  }
+
+  const submittedResults = input.results.map((value) => {
+    if (!validSubmittedCandidate(value)) throw new Error("浏览器提交了无效的评分结果。");
+    const security = claimSymbol(value.symbol);
+    return {
+      ...value,
+      rank: null,
+      symbol: security.symbol,
+      code: security.code,
+      name: security.name,
+      market: security.market,
+      industry: security.industry,
+    } satisfies ScreeningCandidate;
+  });
+  const failures = input.failures.map((failure) => {
+    const security = claimSymbol(failure.symbol);
+    return { ...security, ...sanitizeScreeningFailure(failure.errorCode, failure.errorMessage) };
+  });
+  const shortHistorySymbols = input.shortHistorySymbols.map((symbol) => claimSymbol(symbol).symbol);
+  const unprocessed = input.paused ? (input.unprocessedSymbols ?? []).map((symbol) => claimSymbol(symbol)) : [];
+  if (covered.size !== batch.payload.length) throw new Error("浏览器提交的分片结果不完整，请重新处理该分片。");
+  if (input.dataDate !== null && !/^\d{4}-\d{2}-\d{2}$/.test(input.dataDate)) throw new Error("扫描数据日期无效。");
+
+  const results = [...batch.previousResults, ...submittedResults];
+  const exclusions = new Map(Object.entries(batch.previousExclusions));
+  for (const result of submittedResults) {
+    if (result.bucket === "excluded") exclusions.set(result.firstReason, (exclusions.get(result.firstReason) ?? 0) + 1);
+  }
+  if (shortHistorySymbols.length) {
+    exclusions.set("上市不足250个交易日", (exclusions.get("上市不足250个交易日") ?? 0) + shortHistorySymbols.length);
+  }
+
+  const rateLimit501Delta = failures.filter((failure) => failure.errorCode === "HTTP_501").length;
+  if (input.paused) {
+    if (batch.rateLimit501Count + rateLimit501Delta < HTTP_501_PAUSE_THRESHOLD
+      || unprocessed.length === 0 && failures.length < 1) throw new Error("暂停提交尚未达到 HTTP 501 阈值或缺少待重试标的。");
+    const retrySecurities: ScreeningBatchFailure[] = [
+      ...failures,
+      ...unprocessed.map((security) => ({ ...security, errorCode: "PAUSED_UNPROCESSED", errorMessage: "达到 HTTP 501 暂停阈值前尚未查询。" })),
+    ];
+    const aggregation = await loadScreeningAggregation(batch.jobId);
+    const aggregateResults = aggregation.batches.flatMap((item) => item.batchId === batch.batchId ? results : item.results);
+    const aggregateExclusions = new Map(aggregation.job ? Object.entries(aggregation.job.initialExclusions) : []);
+    for (const item of aggregation.batches) {
+      const source = item.batchId === batch.batchId ? Object.fromEntries(exclusions) : item.exclusions;
+      for (const [reason, count] of Object.entries(source)) aggregateExclusions.set(reason, (aggregateExclusions.get(reason) ?? 0) + count);
+    }
+    await pauseScreeningBatch({
+      batchId: batch.batchId,
+      jobId: batch.jobId,
+      leaseToken: batch.leaseToken,
+      results,
+      exclusions: Object.fromEntries(exclusions),
+      retrySecurities,
+      processed: Math.max(0, batch.totalCount - unprocessed.length),
+      failedCount: failures.length,
+      dataDate: batch.previousDataDate ?? input.dataDate,
+      rateLimit501Delta,
+      candidates: rankScreeningResults(aggregateResults, strategy.outputConfig.topN),
+      candidateTop10: rankCandidateResults(aggregateResults, strategy.outputConfig.topN),
+      aggregatedExclusions: [...aggregateExclusions].map(([reason, count]) => ({ reason, count })).sort((a, b) => b.count - a.count),
+    });
+    return { processed: true as const, paused: true as const, batchId: batch.batchId };
+  }
+
+  await completeScreeningBatch({
+    batchId: batch.batchId,
+    jobId: batch.jobId,
+    leaseToken: batch.leaseToken,
+    results,
+    exclusions: Object.fromEntries(exclusions),
+    processed: batch.totalCount,
+    scored: results.length,
+    failedCount: failures.length,
+    failedSecurities: failures,
+    dataDate: batch.previousDataDate ?? input.dataDate,
+    rateLimit501Delta,
+  });
+  await finalizeReadyScreeningJob(batch.jobId);
+  return { processed: true as const, batchId: batch.batchId };
 }
 
 export async function getScreeningJob(jobId: string) {
-  cleanupJobs();
-  const local = jobs.get(jobId);
-  if (local) return local;
-  if (!isRedisConfigured()) return undefined;
-  const stored = parseJob(await redisGet(jobKey(jobId)));
-  if (!stored) return undefined;
-  const job: InternalJob = { ...stored };
-  jobs.set(jobId, job);
-  return job;
+  return (await getScreeningJobRow(jobId)) ?? undefined;
 }
 
 export async function cancelScreeningJob(jobId: string) {
-  const job = await getScreeningJob(jobId);
-  if (job?.status === "running") {
-    job.cancelled = true;
-    job.status = "cancelled";
-    job.stage = "已取消";
-    await persistJob(job);
-  }
-  return job;
+  return (await cancelScreeningJobRow(jobId)) ?? undefined;
+}
+
+export async function resumeScreeningJob(jobId: string) {
+  return (await resumePausedScreeningJob(jobId)) ?? undefined;
 }

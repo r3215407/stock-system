@@ -35,6 +35,9 @@ export type MarketDataSnapshot = {
   instrumentType: "A股" | "交易所交易基金";
   market: string;
   dataDate: string;
+  quoteDate: string;
+  currentPrice: number;
+  currentChangeRate: number;
   open: number;
   close: number;
   records: number;
@@ -63,38 +66,29 @@ export type MarketDataSnapshot = {
   };
 };
 
-export const scorePositionRules = [
-  { minScore: 90, riskBudgetRate: 0.0075, label: "高匹配" },
-  { minScore: 80, riskBudgetRate: 0.005, label: "标准交易" },
-  { minScore: 70, riskBudgetRate: 0.0025, label: "允许试仓" },
-] as const;
+import { stockStrategyV04 } from "./stock-strategy-v04.ts";
 
-export const modelVersion = "0.4";
-export const minimumTechnicalScore = 65;
-export const minimumStrengthScore = 21;
-export const riskBufferRate = 0.1;
+export const scorePositionRules = stockStrategyV04.position.scoreBands;
+
+export const modelVersion = stockStrategyV04.identity.strategyVersion;
+export const minimumTechnicalScore = stockStrategyV04.gates.minimumTechnicalScore;
+export const minimumStrengthScore = stockStrategyV04.gates.minimumStrengthScore;
+export const riskBufferRate = stockStrategyV04.position.riskBufferRate;
 
 export function getScorePositionRule(score: number) {
   return scorePositionRules.find((rule) => score >= rule.minScore);
 }
 
 export function getPullbackAmplitudeScore(rate: number) {
-  if (rate >= 0.03 && rate < 0.06) return 7;
-  if ((rate >= 0.02 && rate < 0.03) || (rate >= 0.06 && rate < 0.08)) return 5;
-  if (rate >= 0.08 && rate < 0.1) return 3;
-  return 0;
+  return stockStrategyV04.scores.pullback.amplitudeBands.find((band) => rate >= band.minimum && rate < band.maximumExclusive)?.points ?? 0;
 }
 
 export function getMa20DistanceScore(rate: number) {
-  if (rate <= 0.03) return 6;
-  if (rate <= 0.05) return 3;
-  return 0;
+  return stockStrategyV04.scores.pullback.ma20DistanceBands.find((band) => rate <= band.maximumInclusive)?.points ?? 0;
 }
 
 export function getMa60RelationshipScore(minimumCloseToMa60: number) {
-  if (minimumCloseToMa60 >= 1) return 6;
-  if (minimumCloseToMa60 >= 0.98) return 3;
-  return 0;
+  return stockStrategyV04.scores.pullback.ma60RelationshipBands.find((band) => minimumCloseToMa60 >= band.minimumInclusive)?.points ?? 0;
 }
 
 export function getStopDistanceRiskAdjustment(stopDistanceRate: number, score: number) {

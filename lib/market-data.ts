@@ -1,5 +1,3 @@
-import "server-only";
-
 import {
   getMa20DistanceScore,
   getMa60RelationshipScore,
@@ -8,6 +6,7 @@ import {
   type MarketDataSnapshot,
   type ScoreModule,
 } from "@/lib/evaluation";
+import { floorStockPrice } from "@/lib/stock-strategy-v04";
 
 export type DailyBar = {
   date: string;
@@ -27,6 +26,35 @@ type EastmoneyResponse = {
     name: string;
     klines: string[];
   };
+};
+
+type EastmoneyQuoteResponse = {
+  rc: number;
+  data: null | {
+    f43?: number | string;
+    f44?: number | string;
+    f45?: number | string;
+    f46?: number | string;
+    f57?: string;
+    f58?: string;
+    f59?: number | string;
+    f60?: number | string;
+    f86?: number | string;
+  };
+};
+
+export type LiveQuote = {
+  symbol: string;
+  name: string;
+  price: number;
+  open: number;
+  high: number;
+  low: number;
+  previousClose: number;
+  date: string;
+  time: string;
+  provider: string;
+  fetchedAt: string;
 };
 
 type TencentResponse = {
@@ -80,7 +108,9 @@ function parseTencentBar(row: string[]): DailyBar {
     high: Number(high),
     low: Number(low),
     volume: Number(volume),
-    amount: 0,
+    // 腾讯日线的 volume 以手为单位且不返回成交额；使用典型价格估算成交额，
+    // 供全市场流动性过滤使用。逐笔精确成交额仍由东方财富数据覆盖。
+    amount: Number(volume) * 100 * ((Number(open) + Number(close) + Number(high) + Number(low)) / 4),
   };
 }
 
@@ -111,12 +141,92 @@ export function shanghaiClock(now = new Date()) {
   };
 }
 
+function shanghaiDateTime(timestamp: number) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date(timestamp * 1000));
+  const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
+  return {
+    date: `${value("year")}-${value("month")}-${value("day")}`,
+    time: `${value("hour")}:${value("minute")}:${value("second")}`,
+  };
+}
+
+function quoteNumber(value: number | string | undefined, divisor: number) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? number / divisor : 0;
+}
+
+export async function fetchLiveQuote(normalizedSymbol: string): Promise<LiveQuote> {
+  const params = new URLSearchParams({
+    secid: eastmoneySecurityId(normalizedSymbol),
+    fields: "f43,f44,f45,f46,f57,f58,f59,f60,f86",
+    _: String(Date.now()),
+  });
+  const response = await fetch(`https://push2.eastmoney.com/api/qt/stock/get?${params}`, {
+    cache: "no-store",
+    headers: {
+      Accept: "application/json,text/plain,*/*",
+      Referer: "https://quote.eastmoney.com/",
+      "User-Agent": "Mozilla/5.0 (compatible; GlacierSignal/0.2)",
+    },
+    signal: AbortSignal.timeout(8000),
+  }).catch((error: unknown) => {
+    throw new MarketDataError(error instanceof Error ? error.message : "实时行情接口连接失败。", "UPSTREAM_ERROR");
+  });
+  if (!response.ok) throw new MarketDataError(`实时行情接口返回 ${response.status}。`, "UPSTREAM_ERROR");
+  const payload = (await response.json()) as EastmoneyQuoteResponse;
+  const data = payload.data;
+  const decimals = Number(data?.f59);
+  const divisor = 10 ** (Number.isInteger(decimals) && decimals >= 0 ? decimals : 2);
+  const timestamp = Number(data?.f86);
+  const price = quoteNumber(data?.f43, divisor);
+  if (payload.rc !== 0 || !data || !price || !Number.isFinite(timestamp) || timestamp <= 0) {
+    throw new MarketDataError("实时行情接口没有返回有效报价。", "INVALID_DATA");
+  }
+  const quoteTime = shanghaiDateTime(timestamp);
+  return {
+    symbol: normalizedSymbol,
+    name: data.f58 ?? data.f57 ?? normalizedSymbol,
+    price,
+    open: quoteNumber(data.f46, divisor) || price,
+    high: quoteNumber(data.f44, divisor) || price,
+    low: quoteNumber(data.f45, divisor) || price,
+    previousClose: quoteNumber(data.f60, divisor) || price,
+    ...quoteTime,
+    provider: "东方财富实时行情",
+    fetchedAt: new Date().toISOString(),
+  };
+}
+
 export function smaSeries(bars: DailyBar[], period: number) {
   const values: Array<number | null> = Array(bars.length).fill(null);
   let sum = 0;
   for (let index = 0; index < bars.length; index += 1) {
     sum += bars[index].close;
     if (index >= period) sum -= bars[index - period].close;
+    if (index >= period - 1) values[index] = sum / period;
+  }
+  return values;
+}
+
+export function atrSeries(bars: DailyBar[], period = 14) {
+  const values: Array<number | null> = Array(bars.length).fill(null);
+  const ranges = bars.map((bar, index) => {
+    const previousClose = index > 0 ? bars[index - 1].close : bar.close;
+    return Math.max(bar.high - bar.low, Math.abs(bar.high - previousClose), Math.abs(bar.low - previousClose));
+  });
+  let sum = 0;
+  for (let index = 0; index < ranges.length; index += 1) {
+    sum += ranges[index];
+    if (index >= period) sum -= ranges[index - period];
     if (index >= period - 1) values[index] = sum / period;
   }
   return values;
@@ -480,6 +590,9 @@ export async function getMarketDataSnapshot(normalizedSymbol: string, signalDate
   if (bars.length < 250) {
     throw new MarketDataError(`仅取得 ${bars.length} 个有效交易日，少于模型0.4要求的250日。`, "INSUFFICIENT_DATA");
   }
+  const latestBar = bars.at(-1)!;
+  const previousBar = bars.at(-2)!;
+  const currentChangeRate = latestBar.close / previousBar.close - 1;
 
   let signalIndex: number;
   if (signalDate) {
@@ -510,8 +623,7 @@ export async function getMarketDataSnapshot(normalizedSymbol: string, signalDate
       }
     : null;
   const plannedEntryPrice = nextBar?.open ?? signalBar.close;
-  const priceFactor = plannedEntryPrice < 10 ? 1000 : 100;
-  const initialStopPrice = Math.floor((automatic.pullbackLowestPrice - 0.3 * automatic.atr) * priceFactor) / priceFactor;
+  const initialStopPrice = floorStockPrice(automatic.pullbackLowestPrice - 0.3 * automatic.atr);
   const perShareRisk = plannedEntryPrice - initialStopPrice;
   const stopDistanceRate = perShareRisk / plannedEntryPrice;
   const resistanceBars = analysisBars.slice(Math.max(0, analysisBars.length - 61), -1);
@@ -568,6 +680,9 @@ export async function getMarketDataSnapshot(normalizedSymbol: string, signalDate
     instrumentType: instrumentType(name),
     market: marketName(normalizedSymbol),
     dataDate: signalBar.date,
+    quoteDate: latestBar.date,
+    currentPrice: latestBar.close,
+    currentChangeRate,
     open: signalBar.open,
     close: signalBar.close,
     records: analysisBars.length,

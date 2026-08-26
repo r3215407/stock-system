@@ -9,6 +9,7 @@ import {
   riskBufferRate,
 } from "@/lib/evaluation";
 import {
+  atrSeries,
   buildAutomaticEvaluation,
   buildMarketEnvironmentModule,
   cleanBars,
@@ -23,6 +24,8 @@ import {
   type BacktestTrade,
   type StockBacktestReport,
 } from "@/lib/backtest";
+import { applyExitClose, createExitState, evaluateOpenAndStop, type ExitState } from "@/lib/position-exit";
+import { floorStockPrice } from "@/lib/stock-strategy-v04";
 
 const INITIAL_CAPITAL = 100_000;
 const COMMISSION_RATE = 0.0003;
@@ -43,16 +46,10 @@ type PendingEntry = {
   plannedRisk: number;
 };
 
-type OpenPosition = PendingEntry & {
+type OpenPosition = PendingEntry & ExitState & {
   entryCommission: number;
   entryCost: number;
-  activeStop: number;
   initialRiskPerShare: number;
-  hitOneR: boolean;
-  hitTwoR: boolean;
-  belowMa20Days: number;
-  belowMa10Days: number;
-  pendingExitReason: string | null;
 };
 
 function subtractYears(date: string, years: number) {
@@ -62,11 +59,6 @@ function subtractYears(date: string, years: number) {
 
 function commission(amount: number) {
   return Math.max(MINIMUM_COMMISSION, amount * COMMISSION_RATE);
-}
-
-function roundPrice(value: number) {
-  const factor = value < 10 ? 1000 : 100;
-  return Math.floor(value * factor) / factor;
 }
 
 function addRejection(rejections: Map<string, number>, reason: string) {
@@ -154,6 +146,7 @@ export async function runStockBacktest(
   const ma10 = smaSeries(bars, 10);
   const ma20 = smaSeries(bars, 20);
   const ma60 = smaSeries(bars, 60);
+  const atr14 = atrSeries(bars, 14);
   const priceSeries = bars.slice(startIndex, endIndex + 1).map((bar) => ({
     date: bar.date,
     open: bar.open,
@@ -186,13 +179,8 @@ export async function runStockBacktest(
           ...scheduledEntry,
           entryCommission,
           entryCost,
-          activeStop: scheduledEntry.initialStop,
           initialRiskPerShare: scheduledEntry.entryPrice - scheduledEntry.initialStop,
-          hitOneR: false,
-          hitTwoR: false,
-          belowMa20Days: 0,
-          belowMa10Days: 0,
-          pendingExitReason: null,
+          ...createExitState(scheduledEntry.entryPrice, scheduledEntry.initialStop),
         };
       } else {
         cancelledSignalCount += 1;
@@ -202,15 +190,7 @@ export async function runStockBacktest(
     }
 
     if (position) {
-      let exit: { price: number; reason: string } | null = null;
-      if (position.pendingExitReason) exit = { price: bar.open, reason: position.pendingExitReason };
-      else if (bar.open <= position.activeStop) exit = { price: bar.open, reason: "跳空止损" };
-      else if (bar.low <= position.activeStop) {
-        exit = {
-          price: position.activeStop,
-          reason: position.activeStop > position.initialStop ? "保护止损" : "初始止损",
-        };
-      }
+      const exit = evaluateOpenAndStop(position, bar);
 
       if (exit) {
         const result = closePosition({
@@ -230,34 +210,7 @@ export async function runStockBacktest(
     }
 
     if (position) {
-      const currentMa10 = ma10[index];
-      const currentMa20 = ma20[index];
-      const currentMa60 = ma60[index];
-      const holdingDays = index - position.entryIndex + 1;
-      const oneRPrice = position.entryPrice + position.initialRiskPerShare;
-      const twoRPrice = position.entryPrice + position.initialRiskPerShare * 2;
-      if (bar.close >= oneRPrice) {
-        position.hitOneR = true;
-        position.activeStop = Math.max(position.activeStop, position.entryPrice);
-      }
-      if (bar.close >= twoRPrice) position.hitTwoR = true;
-
-      position.belowMa20Days = currentMa20 !== null && bar.close < currentMa20 ? position.belowMa20Days + 1 : 0;
-      position.belowMa10Days = currentMa10 !== null && bar.close < currentMa10 ? position.belowMa10Days + 1 : 0;
-
-      if (currentMa20 !== null && currentMa60 !== null && currentMa20 <= currentMa60) {
-        position.pendingExitReason = "MA20跌破MA60";
-      } else if (currentMa60 !== null && bar.close < currentMa60 * 0.98) {
-        position.pendingExitReason = "收盘跌破MA60超过2%";
-      } else if (position.belowMa20Days >= 2) {
-        position.pendingExitReason = "连续2日收盘低于MA20";
-      } else if (position.hitTwoR && position.belowMa10Days >= 2) {
-        position.pendingExitReason = "达到2R后连续2日低于MA10";
-      } else if (holdingDays >= 10 && !position.hitOneR && bar.close <= position.entryPrice) {
-        position.pendingExitReason = "10日未达到1R";
-      } else if (holdingDays >= 40) {
-        position.pendingExitReason = "最长持有40日";
-      }
+      Object.assign(position, applyExitClose(position, bar, { ma10: ma10[index], ma20: ma20[index], ma60: ma60[index], atr14: atr14[index] }));
     }
 
     if (!position && !pendingEntry && index < endIndex) {
@@ -289,7 +242,7 @@ export async function runStockBacktest(
           addRejection(rejections, "T+1高开超过2%");
         } else {
           const entryPrice: number = nextBar.open * (1 + SLIPPAGE_RATE);
-          const initialStop = roundPrice(automatic.pullbackLowestPrice - 0.3 * automatic.atr);
+          const initialStop = floorStockPrice(automatic.pullbackLowestPrice - 0.3 * automatic.atr);
           const riskPerShare = entryPrice - initialStop;
           const stopDistanceRate = riskPerShare / entryPrice;
           const stopAdjustment = getStopDistanceRiskAdjustment(stopDistanceRate, score);

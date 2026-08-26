@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import styles from "@/app/evaluate/evaluate.module.css";
 import {
@@ -16,6 +16,8 @@ import {
   type ScoreModule,
 } from "@/lib/evaluation";
 import { calculatePositionPlan } from "@/lib/positions";
+import { stockStrategyV04 } from "@/lib/stock-strategy-v04";
+import type { PositionPlanRecord } from "@/lib/position-plan";
 
 type Answers = {
   event: "none" | "exists" | "uncertain" | "";
@@ -117,6 +119,8 @@ export default function EvaluationWorkspace({ snapshot }: { snapshot: MarketData
   const [currentStockValue, setCurrentStockValue] = useState(0);
   const [currentIndustryValue, setCurrentIndustryValue] = useState(0);
   const [threeConsecutiveStops, setThreeConsecutiveStops] = useState(false);
+  const [addState, setAddState] = useState<"idle" | "adding" | "added">("idle");
+  const [addMessage, setAddMessage] = useState("");
 
   const result = useMemo(() => {
     const modules: ScoreModule[] = snapshot.automaticModules;
@@ -188,15 +192,95 @@ export default function EvaluationWorkspace({ snapshot }: { snapshot: MarketData
                         ? "候选"
                         : earned < 80 ? "允许试仓" : earned < 90 ? "标准交易" : "高匹配";
 
-    return { modules, earned, determined, pending, hardStatus, conclusion, stopRiskAdjustment, finalRiskRate, allocationRate, stopPrice: snapshot.initialStopPrice, outputsAvailable, technicalScore, strengthScore, technicalGatePassed, strengthGatePassed, triggerGatePassed, allowedRisk, availablePortfolioRisk, shares, plannedLoss, perShareRisk, criticalBreakout };
+    const addBlockReason = eventFail || emotionFail
+      ? "人工确认结果不允许加入"
+      : userPending
+        ? "完成事件风险与交易动机确认"
+        : automaticFail
+          ? snapshot.automaticFilters.find((filter) => filter.status === "fail" && filter.id !== "HF-05")?.detail ?? "硬性条件失败"
+          : earned < 70
+            ? "总分不足 70 分"
+            : !technicalGatePassed
+              ? "技术分不足 65 分"
+              : !strengthGatePassed || !triggerGatePassed || triggerFilterFailed
+                ? "等待重新转强触发"
+                : !stopRiskAdjustment.executable
+                  ? "止损档位不可执行"
+                  : criticalBreakout
+                    ? "压力空间不足"
+                    : null;
+    return { modules, earned, determined, pending, hardStatus, conclusion, stopRiskAdjustment, finalRiskRate, allocationRate, stopPrice: snapshot.initialStopPrice, outputsAvailable, technicalScore, strengthScore, technicalGatePassed, strengthGatePassed, triggerGatePassed, allowedRisk, availablePortfolioRisk, shares, plannedLoss, perShareRisk, criticalBreakout, addEligible: addBlockReason === null, addBlockReason };
   }, [answers, accountEquity, currentIndustryValue, currentOpenRisk, currentStockValue, snapshot, threeConsecutiveStops]);
 
   function updateAnswer<Key extends keyof Answers>(key: Key, value: Answers[Key]) {
     setAnswers((current) => ({ ...current, [key]: value }));
   }
 
+  useEffect(() => {
+    let active = true;
+    fetch("/api/position-plan", { cache: "no-store" }).then((response) => response.ok ? response.json() : null).then((plan: PositionPlanRecord | null) => {
+      if (!active || !plan) return;
+      const existing = plan.items.find((item) => item.symbol === snapshot.symbol);
+      if (existing && existing.signalDate === snapshot.dataDate && existing.strategyVersion === stockStrategyV04.identity.strategyVersion) setAddState("added");
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, [snapshot.dataDate, snapshot.symbol]);
+
+  async function addToPositionPlan(replaceSignal = false) {
+    if (!result.addEligible || addState === "adding") return;
+    setAddState("adding");
+    setAddMessage("");
+    try {
+      const planResponse = await fetch("/api/position-plan", { cache: "no-store" });
+      if (!planResponse.ok) throw new Error("无法读取共享模拟盘");
+      const plan = await planResponse.json() as PositionPlanRecord;
+      const response = await fetch("/api/position-plan/items", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          revision: plan.revision,
+          replaceSignal,
+          item: {
+            symbol: snapshot.symbol,
+            name: snapshot.name,
+            industry: "未分类",
+            score: result.earned,
+            technicalScore: result.technicalScore,
+            strengthScore: result.strengthScore,
+            signalDate: snapshot.dataDate,
+            plannedEntryPrice: snapshot.plannedEntryPrice,
+            initialStopPrice: snapshot.initialStopPrice,
+            strategyId: stockStrategyV04.identity.strategyId,
+            strategyVersion: stockStrategyV04.identity.strategyVersion,
+            parameterVersion: stockStrategyV04.identity.parameterVersion,
+            source: "individual-evaluation",
+            confirmationState: snapshot.t1Open ? "confirmed" : "pending-t1-open",
+          },
+        }),
+      });
+      const payload = await response.json() as { code?: string; message?: string };
+      if (response.status === 409 && payload.code === "SIGNAL_REPLACE_REQUIRED" && !replaceSignal) {
+        if (window.confirm("该股票已有不同信号。使用当前评分日和策略更新原项？")) return addToPositionPlan(true);
+        setAddState("idle");
+        return;
+      }
+      if (!response.ok) throw new Error(payload.message ?? "加入失败");
+      setAddState("added");
+      setAddMessage("已写入共享仓位方案");
+    } catch (error) {
+      setAddState("idle");
+      setAddMessage(error instanceof Error ? error.message : "加入失败");
+    }
+  }
+
   const stampLabel = result.hardStatus === "pass" ? "允许签发 / VALID" : result.hardStatus === "fail" ? "已作废 / VOID" : "待确认 / PENDING";
   const stampClass = result.hardStatus === "pass" ? `${styles.stamp} ${styles.stampPass}` : styles.stamp;
+  const currentChangeText = `${snapshot.currentChangeRate >= 0 ? "+" : ""}${(snapshot.currentChangeRate * 100).toFixed(2)}%`;
+  const currentChangeClass = snapshot.currentChangeRate > 0
+    ? styles.pricePositive
+    : snapshot.currentChangeRate < 0
+      ? styles.priceNegative
+      : undefined;
 
   return (
     <div className={styles.workspace}>
@@ -239,12 +323,16 @@ export default function EvaluationWorkspace({ snapshot }: { snapshot: MarketData
             <span className={stampClass}>{stampLabel}</span>
           </div>
           <div className={styles.scoreRow}>
-            <div><span className={styles.scoreLabel}>候选评分</span><div className={styles.scoreValue}>{result.earned}<small>/ {result.determined}</small></div></div>
-            <p className={styles.dataDate}>待判定 {result.pending} 分<br />评分不是上涨概率</p>
+            <div className={styles.scoreBlock}>
+              <span className={styles.scoreLabel}>候选评分</span>
+              <div className={styles.scoreValue}><span>{result.earned}</span><small>/ {result.determined}</small></div>
+            </div>
+            <p className={`${styles.dataDate} ${styles.scoreMeta}`}>待判定 {result.pending} 分<br />评分不是上涨概率</p>
           </div>
           <dl className={styles.priceGrid}>
-            <div><dt>开盘</dt><dd>¥{formatMoney(snapshot.open)}</dd></div>
-            <div><dt>收盘</dt><dd>¥{formatMoney(snapshot.close)}</dd></div>
+            <div><dt>最新价 <small>{snapshot.quoteDate}</small></dt><dd>¥{formatMoney(snapshot.currentPrice)}</dd></div>
+            <div><dt>当前涨幅 <small>较前收盘</small></dt><dd className={currentChangeClass}>{currentChangeText}</dd></div>
+            <div><dt>评分日开 / 收</dt><dd>¥{formatMoney(snapshot.open)} / ¥{formatMoney(snapshot.close)}</dd></div>
             <div><dt>完整度</dt><dd>{snapshot.completeness}%</dd></div>
           </dl>
         </section>
@@ -269,7 +357,11 @@ export default function EvaluationWorkspace({ snapshot }: { snapshot: MarketData
             <div><dt>仓位占账户</dt><dd>{result.outputsAvailable ? `${(result.allocationRate * 100).toFixed(2)}%` : "—"}</dd></div>
             <div><dt>最终风险比例</dt><dd>{(result.finalRiskRate * 100).toFixed(3)}%</dd></div>
           </dl>
-          <Link className={styles.actionLink} href={`/evaluate/backtest?symbol=${encodeURIComponent(snapshot.symbol.split(".")[0])}&endDate=${encodeURIComponent(snapshot.dataDate)}`}>查看近两年回测</Link>
+          <div className={styles.receiptActions}>
+            <button className={styles.actionLink} disabled={!result.addEligible || addState === "adding" || addState === "added"} onClick={() => addToPositionPlan()} type="button">{addState === "adding" ? "正在加入…" : addState === "added" ? "已在仓位方案" : "加入仓位方案"}</button>
+            <Link className={styles.secondaryAction} href={`/evaluate/backtest?symbol=${encodeURIComponent(snapshot.symbol.split(".")[0])}&endDate=${encodeURIComponent(snapshot.dataDate)}`}>查看近两年回测</Link>
+          </div>
+          <p aria-live="polite" className={styles.addFeedback}>{addState === "added" ? <Link href="/positions">{addMessage || "查看仓位方案"}</Link> : addMessage || result.addBlockReason}</p>
           <p className={styles.receiptNote}>模型 {modelVersion} · 止损距离 {(snapshot.stopDistanceRate * 100).toFixed(2)}% · {result.stopRiskAdjustment.label}</p>
         </aside>
       </div>
@@ -308,7 +400,7 @@ export default function EvaluationWorkspace({ snapshot }: { snapshot: MarketData
 
       <div className={styles.footTickets}>
         <details className={styles.footTicket}><summary className={styles.detailsSummary}><span className={styles.moduleName}>次日取消条件</span><span aria-hidden="true" className={styles.expandMark} /></summary><ul className={styles.footList}>{cancellationConditions.map((condition) => <li key={condition}>{condition}</li>)}</ul></details>
-        <details className={styles.footTicket}><summary className={styles.detailsSummary}><span className={styles.moduleName}>模型0.4参数依据</span><span aria-hidden="true" className={styles.expandMark} /></summary><ul className={styles.footList}>{modelNotes.map((note) => <li key={note}>{note}</li>)}</ul></details>
+        <details className={styles.footTicket}><summary className={styles.detailsSummary}><span className={styles.moduleName}>模型0.4参数依据</span><span aria-hidden="true" className={styles.expandMark} /></summary><ul className={styles.footList}>{modelNotes.map((note) => <li key={note}>{note}</li>)}<li><Link href="/methodology/stock-score">查看完整评分规则</Link></li></ul></details>
       </div>
 
       <p className={styles.disclaimer}>

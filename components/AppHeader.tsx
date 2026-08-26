@@ -7,7 +7,21 @@ import { useState } from "react";
 import BrandLogo from "@/components/BrandLogo";
 import { currentStrategy } from "@/lib/strategies";
 
-const links = [{ href: "/", label: "今日选股" }, { href: "/evaluate", label: "个股评分" }, { href: "/positions", label: "仓位方案" }];
+const links = [
+  { href: "/", label: "今日选股" },
+  { href: "/evaluate", label: "个股评分" },
+  { href: "/positions", label: "仓位方案" },
+  { href: "/methodology/stock-score", label: "评分规则" },
+  { href: "/etf-rotation", label: "ETF 动量轮动" },
+];
+
+function MenuIcon({ open }: { open: boolean }) {
+  return <svg aria-hidden="true" className="size-5" fill="none" viewBox="0 0 20 20">
+    {open
+      ? <path d="M4 4l12 12M16 4 4 16" stroke="currentColor" strokeLinecap="square" strokeWidth="1.8" />
+      : <path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" strokeLinecap="square" strokeWidth="1.8" />}
+  </svg>;
+}
 
 export default function AppHeader() {
   const pathname = usePathname();
@@ -34,13 +48,13 @@ export default function AppHeader() {
           })}
         </nav>
         <div className="ml-auto hidden items-center gap-4 md:flex">
-          <span className={ticketMode ? "border border-[#B69BD0]/40 bg-[#B69BD0]/15 px-3 py-1.5 text-xs font-semibold text-[#E3D6EE]" : "rounded-full border border-[#5661D9]/20 bg-[#F1F0FF] px-3 py-1.5 text-xs font-semibold text-[#665FB5]"}>{currentStrategy.shortName}</span>
+          <Link className={ticketMode ? "border border-[#B69BD0]/40 bg-[#B69BD0]/15 px-3 py-1.5 text-xs font-semibold text-[#E3D6EE]" : "rounded-full border border-[#5661D9]/20 bg-[#F1F0FF] px-3 py-1.5 text-xs font-semibold text-[#665FB5]"} href="/methodology/stock-score">{currentStrategy.shortName}</Link>
           <form action="/evaluate" className={ticketMode ? "flex h-10 items-center border border-white/20 bg-white/5 px-3 focus-within:border-[#D8C9E8]" : "flex h-10 items-center rounded-xl border border-[#102C3A]/15 bg-white px-3 focus-within:border-[#5661D9]"}>
             <input aria-label="搜索股票代码" className={ticketMode ? "w-32 bg-transparent text-sm text-white outline-none placeholder:text-[#8292B2]" : "w-32 bg-transparent text-sm outline-none placeholder:text-[#8AA0AA]"} inputMode="numeric" maxLength={6} name="symbol" pattern="[0-9]{6}" placeholder="搜索股票代码" required />
             <button className={ticketMode ? "ml-2 text-xs font-semibold text-[#E3D6EE]" : "ml-2 text-xs font-semibold text-[#1E5A70]"} type="submit">搜索</button>
           </form>
         </div>
-        <button aria-expanded={open} aria-label="打开菜单" className={ticketMode ? "ml-auto grid size-10 place-items-center border border-white/20 bg-white/5 text-white md:hidden" : "ml-auto grid size-10 place-items-center rounded-xl border border-[#102C3A]/15 bg-white md:hidden"} onClick={() => setOpen(!open)} type="button">{open ? "×" : "☰"}</button>
+        <button aria-expanded={open} aria-label={open ? "关闭菜单" : "打开菜单"} className={ticketMode ? "ml-auto grid size-11 place-items-center border border-white/20 bg-white/5 text-white md:hidden" : "ml-auto grid size-11 place-items-center rounded-xl border border-[#102C3A]/15 bg-white md:hidden"} onClick={() => setOpen(!open)} type="button"><MenuIcon open={open} /></button>
       </div>
       {open ? <div className={ticketMode ? "border-t border-white/15 bg-[#07142F] px-4 py-4 md:hidden" : "border-t border-[#102C3A]/10 bg-white px-4 py-4 md:hidden"}>
         <nav className="grid gap-1">{links.map((link) => <Link className={ticketMode ? "px-3 py-3 text-sm font-semibold text-white" : "rounded-xl px-3 py-3 text-sm font-semibold text-[#102C3A]"} href={link.href} key={link.href} onClick={() => setOpen(false)}>{link.label}</Link>)}</nav>
