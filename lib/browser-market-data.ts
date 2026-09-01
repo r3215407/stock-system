@@ -21,7 +21,7 @@ export class BrowserMarketDataError extends Error {
   }
 }
 
-const MIN_REQUEST_INTERVAL_MS = 450;
+const MIN_REQUEST_INTERVAL_MS = 900;
 let nextRequestAt = 0;
 let requestGate = Promise.resolve();
 
@@ -128,8 +128,8 @@ export async function fetchBrowserMarketBars(symbol: string, signal: AbortSignal
       if (signal.aborted) throw error;
       lastError = error;
       if (attempt === 0) {
-        const retryDelay = error instanceof BrowserMarketDataError && error.code === "RATE_LIMITED" ? 3_000 : 1_200;
-        await wait(retryDelay + Math.floor(Math.random() * 400), signal);
+        const retryDelay = error instanceof BrowserMarketDataError && error.code === "RATE_LIMITED" ? 5_000 : 2_000;
+        await wait(retryDelay + Math.floor(Math.random() * 800), signal);
       }
     }
   }

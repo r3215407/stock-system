@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  accumulateHttp501Failures,
+  accumulateScreeningFailures,
+  accumulateScreeningWorkerFailures,
   describeScreeningFailure,
   isChiNextCode,
   rankCandidateResults,
@@ -62,7 +63,7 @@ test("浏览器提交的失败信息限制错误码并隐藏地址", () => {
   assert.equal(sanitizeScreeningFailure("<script>", "").errorCode, "UPSTREAM_ERROR");
 });
 
-test("HTTP 501 使用独立错误码供暂停策略累计", () => {
+test("HTTP 501 使用独立错误码供失败明细识别", () => {
   const error = Object.assign(new Error("腾讯行情请求过密或暂不可用（HTTP 501）"), { code: "RATE_LIMITED", httpStatus: 501 });
   assert.deepEqual(describeScreeningFailure(error), {
     errorCode: "HTTP_501",
@@ -70,13 +71,20 @@ test("HTTP 501 使用独立错误码供暂停策略累计", () => {
   });
 });
 
-test("仅累计 HTTP 501 并在第三个失败时暂停", () => {
-  const first = accumulateHttp501Failures(0, 501);
-  const ignored = accumulateHttp501Failures(first.count, 503);
-  const second = accumulateHttp501Failures(ignored.count, 501);
-  const third = accumulateHttp501Failures(second.count, 501);
+test("任意行情失败累计到第三次时暂停", () => {
+  const first = accumulateScreeningFailures(0);
+  const second = accumulateScreeningFailures(first.count);
+  const third = accumulateScreeningFailures(second.count);
   assert.deepEqual(first, { count: 1, shouldPause: false });
-  assert.deepEqual(ignored, { count: 1, shouldPause: false });
+  assert.deepEqual(second, { count: 2, shouldPause: false });
+  assert.deepEqual(third, { count: 3, shouldPause: true });
+});
+
+test("扫描 Worker 连续失败三次后暂停并等待用户继续", () => {
+  const first = accumulateScreeningWorkerFailures(0);
+  const second = accumulateScreeningWorkerFailures(first.count);
+  const third = accumulateScreeningWorkerFailures(second.count);
+  assert.deepEqual(first, { count: 1, shouldPause: false });
   assert.deepEqual(second, { count: 2, shouldPause: false });
   assert.deepEqual(third, { count: 3, shouldPause: true });
 });

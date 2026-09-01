@@ -1,4 +1,4 @@
-import { cancelScreeningJob, getScreeningJob, resumeScreeningJob } from "@/lib/screening-jobs";
+import { cancelScreeningJob, getScreeningJob, pauseScreeningJobForWorkerFailures, resumeScreeningJob } from "@/lib/screening-jobs";
 
 export const dynamic = "force-dynamic";
 
@@ -28,11 +28,18 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ jo
   const { jobId } = await params;
   try {
     const body = await request.json().catch(() => ({})) as { action?: unknown };
-    if (body.action !== "continue") return Response.json({ error: { code: "INVALID_ACTION", message: "仅支持继续已暂停的扫描任务。" } }, { status: 400 });
-    const job = await resumeScreeningJob(jobId);
-    if (!job) return Response.json({ error: { code: "JOB_NOT_PAUSED", message: "任务不存在或当前不是暂停状态。" } }, { status: 409 });
+    if (body.action !== "continue" && body.action !== "pause_after_failures") {
+      return Response.json({ error: { code: "INVALID_ACTION", message: "不支持该扫描任务操作。" } }, { status: 400 });
+    }
+    const job = body.action === "continue"
+      ? await resumeScreeningJob(jobId)
+      : await pauseScreeningJobForWorkerFailures(jobId);
+    if (!job) {
+      const message = body.action === "continue" ? "任务不存在或当前不是暂停状态。" : "任务不存在或当前不是运行状态。";
+      return Response.json({ error: { code: "JOB_STATE_CONFLICT", message } }, { status: 409 });
+    }
     return Response.json({ data: job }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
-    return Response.json({ error: { code: "DATABASE_UNAVAILABLE", message: error instanceof Error ? `继续任务失败：${error.message}` : "继续任务失败。" } }, { status: 503 });
+    return Response.json({ error: { code: "DATABASE_UNAVAILABLE", message: error instanceof Error ? `更新任务状态失败：${error.message}` : "更新任务状态失败。" } }, { status: 503 });
   }
 }

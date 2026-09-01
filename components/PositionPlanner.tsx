@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import styles from "@/app/operational.module.css";
 import type { PositionPlanItemRecord, PositionPlanRecord, PositionTradeRecord } from "@/lib/position-plan";
-import { calculatePositionPerformance } from "@/lib/position-performance";
+import { calculatePortfolioReturnSummary, calculatePositionPerformance } from "@/lib/position-performance";
 import type { HoldingStatus } from "@/lib/position-status";
 import { calculatePositionPlan } from "@/lib/positions";
 
@@ -86,6 +86,17 @@ export default function PositionPlanner({ encodedItems: _encodedItems }: { encod
   const plannedItems = record?.items.filter((item) => item.positionState === "planned") ?? [];
   const plan = useMemo(() => calculatePositionPlan({ accountEquity: record?.accountEquity ?? 0, currentOpenRisk: (record?.currentOpenRisk ?? 0) + heldRisk, threeConsecutiveStops: record?.threeConsecutiveStops ?? false, candidates: plannedItems.map((item) => ({ symbol: item.symbol, name: item.name, industry: item.industry, rank: item.priority, score: item.score, entryPrice: item.plannedEntryPrice, initialStopPrice: item.initialStopPrice, existingStockValue: item.existingStockValue, existingIndustryValue: item.existingIndustryValue + (industryHeld.get(item.industry) ?? 0) })) }), [record, heldRisk, plannedItems, industryHeld]);
   const performance = useMemo(() => calculatePositionPerformance(record?.history ?? []), [record?.history]);
+  const returnSummary = useMemo(() => calculatePortfolioReturnSummary(
+    record?.accountEquity ?? 0,
+    record?.history ?? [],
+    heldItems.map((item) => ({
+      purchaseDate: item.purchaseDate,
+      valuationDate: statuses[item.id]?.quoteDate ?? null,
+      averageCost: item.averageCost,
+      currentPrice: statuses[item.id]?.currentPrice ?? item.averageCost,
+      actualShares: item.actualShares,
+    })),
+  ), [record?.accountEquity, record?.history, heldStatusKey, statuses]);
 
   function localItem(id: string, changes: Partial<PositionPlanItemRecord>) { dirtyRef.current = true; setRecord((current) => current ? { ...current, items: current.items.map((item) => item.id === id ? { ...item, ...changes } : item) } : current); }
   async function saveItem(id: string, changes: Record<string, unknown>) {
@@ -147,6 +158,11 @@ export default function PositionPlanner({ encodedItems: _encodedItems }: { encod
     <header className={styles.hero}><div className={styles.heroMain}><p className={styles.eyebrow}>共享模拟盘 · 自动持久化</p><h1 className={styles.heroTitle}>计划买入，<br/><em>追踪完整交易路径</em></h1><p className={styles.heroCopy}>计划项按优先级占用组合风险；持仓沿完整日线管理退出，卖出后保留收益、复盘与沪深300同期对照。</p></div><div className={styles.heroSide}><strong>策略提示，不自动交易</strong><p>{message}</p>{remotePlan ? <button className={styles.secondaryButton} onClick={() => { acceptPlan(remotePlan); setRemotePlan(null); setMessage(`已载入版本 ${remotePlan.revision}`); }}>载入最新版本</button> : null}<button className={styles.dangerButton} onClick={clearAll}>清空全部</button></div></header>
     <section className={styles.section}><header className={styles.sectionHeader}><h2>账户与组合风险</h2><p>提交后立即写入 PostgreSQL，所有浏览器读取同一份数据。</p></header><div className={styles.formStrip}><NumberInput label="账户净值" value={record.accountEquity} onChange={(value) => { dirtyRef.current=true; setRecord({...record,accountEquity:value}); }} onBlur={() => saveAccount({ accountEquity: record.accountEquity })}/><NumberInput label="外部未平仓风险" value={record.currentOpenRisk} onChange={(value) => { dirtyRef.current=true; setRecord({...record,currentOpenRisk:value}); }} onBlur={() => saveAccount({ currentOpenRisk: record.currentOpenRisk })}/><label className={`${styles.formCell} ${styles.checkCell}`}><input checked={record.threeConsecutiveStops} onChange={(event) => { setRecord({...record,threeConsecutiveStops:event.target.checked}); saveAccount({ threeConsecutiveStops:event.target.checked }); }} type="checkbox"/><span>连续3笔完整止损<br/><small>单笔风险减半</small></span></label><div className={`${styles.formCell} ${styles.ruleCell}`}>单股 15% · 行业 30%<br/>组合风险 2% · 缓冲 10%</div></div></section>
     <dl className={styles.metricGrid}>{[["计划市值",currency(plan.plannedValue)],["新增计划风险",currency(plan.addedRisk)],["已持有市值",currency(heldValue)],["当前保护风险",currency(heldRisk)]].map(([label,value])=><div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
+    <dl className={styles.returnGrid}>
+      <div><dt>当前持仓收益</dt><dd data-sign={returnSummary.heldProfit >= 0 ? "positive" : "negative"}>{currency(returnSummary.heldProfit)}</dd><small>{percent(returnSummary.heldReturn)} · 未实现</small></div>
+      <div><dt>累计收益</dt><dd data-sign={returnSummary.cumulativeProfit >= 0 ? "positive" : "negative"}>{currency(returnSummary.cumulativeProfit)}</dd><small>{percent(returnSummary.cumulativeReturn)} · 已实现与未实现合计</small></div>
+      <div><dt>年化收益</dt><dd data-sign={(returnSummary.annualizedReturn ?? 0) >= 0 ? "positive" : "negative"}>{percent(returnSummary.annualizedReturn)}</dd><small>{returnSummary.elapsedDays === null ? "等待有效成交日期" : `按 ${returnSummary.elapsedDays} 个自然日折算`}</small></div>
+    </dl>
     <section className={styles.section}><header className={styles.priorityHeader}><div><h2>仓位项目</h2><p>计划与已持有分别计算，已持有市值和保护风险会占用后续计划容量。</p></div><strong>{record.items.length} 只</strong></header>
       {!record.items.length ? <div className={styles.positionEmpty}><h3>尚未加入标的</h3><p>从“今日选股”或“个股评分”加入后会出现在这里。</p><a className={styles.linkButton} href="/evaluate">前往个股评分</a></div> : <div className={styles.positionList}>{record.items.map((item,index) => {
         const planned = plan.items.find((candidate) => candidate.symbol === item.symbol); const status = statuses[item.id]; const draft = heldDrafts[item.id];

@@ -17,6 +17,23 @@ export type PositionPerformance = {
   maxDrawdown: number | null;
 };
 
+export type OpenPositionMark = {
+  purchaseDate: string | null;
+  valuationDate: string | null;
+  averageCost: number | null;
+  currentPrice: number | null;
+  actualShares: number | null;
+};
+
+export type PortfolioReturnSummary = {
+  heldProfit: number;
+  heldReturn: number | null;
+  cumulativeProfit: number;
+  cumulativeReturn: number | null;
+  annualizedReturn: number | null;
+  elapsedDays: number | null;
+};
+
 function mean(values: number[]) {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
@@ -52,6 +69,52 @@ function maxDrawdown(trades: PositionTradeRecord[]) {
     drawdown = Math.min(drawdown, wealth / peak - 1);
   }
   return drawdown;
+}
+
+function dateValue(value: string) {
+  const time = Date.parse(`${value}T00:00:00Z`);
+  return Number.isFinite(time) ? time : null;
+}
+
+export function calculatePortfolioReturnSummary(
+  accountEquity: number,
+  trades: PositionTradeRecord[],
+  openPositions: OpenPositionMark[],
+): PortfolioReturnSummary {
+  const validOpenPositions = openPositions.filter((position) =>
+    position.averageCost !== null && position.averageCost > 0
+    && position.currentPrice !== null && position.currentPrice > 0
+    && position.actualShares !== null && position.actualShares > 0);
+  const heldCost = validOpenPositions.reduce((sum, position) => sum + position.averageCost! * position.actualShares!, 0);
+  const heldProfit = validOpenPositions.reduce(
+    (sum, position) => sum + (position.currentPrice! - position.averageCost!) * position.actualShares!,
+    0,
+  );
+  const realizedProfit = trades.reduce((sum, trade) => sum + trade.netProfit, 0);
+  const cumulativeProfit = realizedProfit + heldProfit;
+  const cumulativeReturn = accountEquity > 0 ? cumulativeProfit / accountEquity : null;
+  const startDates = [
+    ...trades.map((trade) => trade.purchaseDate),
+    ...validOpenPositions.flatMap((position) => position.purchaseDate ? [position.purchaseDate] : []),
+  ].map(dateValue).filter((value): value is number => value !== null);
+  const endDates = [
+    ...trades.map((trade) => trade.exitDate),
+    ...validOpenPositions.flatMap((position) => position.valuationDate ? [position.valuationDate] : []),
+  ].map(dateValue).filter((value): value is number => value !== null);
+  const elapsedDays = startDates.length && endDates.length
+    ? Math.max(0, Math.round((Math.max(...endDates) - Math.min(...startDates)) / 86_400_000))
+    : null;
+  const annualizedReturn = cumulativeReturn !== null && cumulativeReturn > -1 && elapsedDays !== null && elapsedDays > 0
+    ? (1 + cumulativeReturn) ** (365 / elapsedDays) - 1
+    : null;
+  return {
+    heldProfit,
+    heldReturn: heldCost > 0 ? heldProfit / heldCost : null,
+    cumulativeProfit,
+    cumulativeReturn,
+    annualizedReturn,
+    elapsedDays,
+  };
 }
 
 export function calculatePositionPerformance(trades: PositionTradeRecord[]): PositionPerformance {

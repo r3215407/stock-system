@@ -61,7 +61,7 @@ export type ScreeningJob = {
   afterBasicFilter: number;
   scored: number;
   failedCount: number;
-  rateLimit501Count: number;
+  pauseFailureCount: number;
   elapsedMs: number;
   provider: string;
   adjustment: "前复权";
@@ -91,11 +91,17 @@ export type BrowserScreeningWork =
   | { kind: "INITIALIZATION" }
   | { kind: "IDLE" };
 
-export const HTTP_501_PAUSE_THRESHOLD = 3;
+export const SCREENING_FAILURE_PAUSE_THRESHOLD = 3;
+export const SCREENING_WORKER_FAILURE_PAUSE_THRESHOLD = 3;
 
-export function accumulateHttp501Failures(current: number, httpStatus: number | null) {
-  const count = current + (httpStatus === 501 ? 1 : 0);
-  return { count, shouldPause: count >= HTTP_501_PAUSE_THRESHOLD };
+export function accumulateScreeningFailures(current: number) {
+  const count = current + 1;
+  return { count, shouldPause: count >= SCREENING_FAILURE_PAUSE_THRESHOLD };
+}
+
+export function accumulateScreeningWorkerFailures(current: number) {
+  const count = current + 1;
+  return { count, shouldPause: count >= SCREENING_WORKER_FAILURE_PAUSE_THRESHOLD };
 }
 
 export function isChiNextCode(code: string) {

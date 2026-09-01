@@ -25,7 +25,7 @@ type JobRow = {
   afterBasicFilter: number;
   scored: number;
   failedCount: number;
-  rateLimit501Count: number;
+  pauseFailureCount: number;
   elapsedMs: number;
   provider: string;
   adjustment: "前复权";
@@ -56,7 +56,7 @@ export type ClaimedScreeningBatch = {
   strategyVersion: string;
   requestedDate: string | null;
   environmentScore: number;
-  rateLimit501Count: number;
+  pauseFailureCount: number;
 };
 
 export type ClaimedScreeningInitialization = {
@@ -229,7 +229,7 @@ function selectJob(sql: ReturnType<typeof database>, condition: ReturnType<typeo
       parameter_version AS "parameterVersion", requested_date::text AS "requestedDate", data_date::text AS "dataDate",
       created_at::text AS "createdAt", generated_at::text AS "generatedAt", expires_at::text AS "expiresAt",
       processed, universe_total AS "universeTotal", after_basic_filter AS "afterBasicFilter", scored,
-      failed_count AS "failedCount", rate_limit_501_count AS "rateLimit501Count",
+      failed_count AS "failedCount", rate_limit_501_count AS "pauseFailureCount",
       elapsed_ms::integer AS "elapsedMs", provider, adjustment, incomplete, error,
       candidates, watch AS "candidateTop10", exclusions,
       COALESCE((
@@ -437,6 +437,34 @@ export async function failScreeningJob(jobId: string, error: unknown) {
   `;
 }
 
+export async function pauseScreeningJobAfterFailures(jobId: string) {
+  await ensureScreeningSchema();
+  const sql = database();
+  const paused = await sql.begin(async (tx) => {
+    const pausedJobs = await tx`
+      UPDATE screening_jobs SET status = 'paused', stage = '已暂停',
+        initialization_status = CASE WHEN initialization_status = 'running' THEN 'pending' ELSE initialization_status END,
+        initialization_attempts = CASE WHEN initialization_status = 'running' THEN 0 ELSE initialization_attempts END,
+        initialization_lease_until = NULL,
+        error = '扫描连续处理失败 3 次，已暂停并保留当前结果。点击继续后再恢复扫描。',
+        elapsed_ms = GREATEST(elapsed_ms, floor(extract(epoch FROM (now() - created_at)) * 1000)::bigint),
+        expires_at = now() + interval '3 days'
+      WHERE id = ${jobId} AND status = 'running'
+      RETURNING id
+    `;
+    if (!pausedJobs.length) return pausedJobs;
+    await tx`
+      UPDATE screening_batches SET status = 'pending', attempts = 0,
+        lease_until = NULL, lease_token = NULL, finished_at = NULL,
+        error = '页面连续三次处理失败，等待手动继续'
+      WHERE job_id = ${jobId} AND status = 'running'
+    `;
+    return pausedJobs;
+  });
+  if (!paused.length) return null;
+  return getScreeningJobRow(jobId);
+}
+
 export async function claimScreeningBatch(jobId?: string): Promise<ClaimedScreeningBatch | null> {
   await ensureScreeningSchema();
   const sql = database();
@@ -459,7 +487,7 @@ export async function claimScreeningBatch(jobId?: string): Promise<ClaimedScreen
         b.exclusions AS "previousExclusions", b.data_date::text AS "previousDataDate", b.attempts,
         j.strategy_id AS "strategyId", j.strategy_version AS "strategyVersion",
         j.requested_date::text AS "requestedDate", j.environment_score AS "environmentScore",
-        j.rate_limit_501_count AS "rateLimit501Count"
+        j.rate_limit_501_count AS "pauseFailureCount"
       FROM screening_batches b
       JOIN screening_jobs j ON j.id = b.job_id
       WHERE b.status = 'pending' AND j.status = 'running' AND j.environment_score IS NOT NULL
@@ -490,7 +518,7 @@ export async function getClaimedScreeningBatch(jobId: string, batchId: string, l
       b.exclusions AS "previousExclusions", b.data_date::text AS "previousDataDate", b.attempts,
       j.strategy_id AS "strategyId", j.strategy_version AS "strategyVersion",
       j.requested_date::text AS "requestedDate", j.environment_score AS "environmentScore",
-      j.rate_limit_501_count AS "rateLimit501Count"
+      j.rate_limit_501_count AS "pauseFailureCount"
     FROM screening_batches b
     JOIN screening_jobs j ON j.id = b.job_id
     WHERE b.id = ${batchId}::uuid AND b.job_id = ${jobId}::uuid
@@ -510,7 +538,7 @@ export async function completeScreeningBatch(input: {
   failedCount: number;
   failedSecurities: ScreeningBatchFailure[];
   dataDate: string | null;
-  rateLimit501Delta?: number;
+  pauseFailureDelta?: number;
 }) {
   const sql = database();
   await sql.begin(async (tx) => {
@@ -527,7 +555,7 @@ export async function completeScreeningBatch(input: {
     await tx`
       UPDATE screening_jobs j SET
         processed = totals.processed, scored = totals.scored, failed_count = totals.failed_count,
-        rate_limit_501_count = j.rate_limit_501_count + ${input.rateLimit501Delta ?? 0},
+        rate_limit_501_count = j.rate_limit_501_count + ${input.pauseFailureDelta ?? 0},
         data_date = COALESCE(j.data_date, totals.data_date),
         elapsed_ms = floor(extract(epoch FROM (now() - j.created_at)) * 1000)::bigint
       FROM (
@@ -551,7 +579,7 @@ export async function pauseScreeningBatch(input: {
   processed: number;
   failedCount: number;
   dataDate: string | null;
-  rateLimit501Delta: number;
+  pauseFailureDelta: number;
   candidates: ScreeningCandidate[];
   candidateTop10: ScreeningCandidate[];
   aggregatedExclusions: Array<{ reason: string; count: number }>;
@@ -563,7 +591,7 @@ export async function pauseScreeningBatch(input: {
         exclusions = ${tx.json(input.exclusions)}, processed = ${input.processed}, scored = ${input.results.length},
         failed_count = ${input.failedCount}, failed_payload = ${tx.json(input.retrySecurities)},
         data_date = ${input.dataDate}::date, attempts = 0, lease_until = NULL, lease_token = NULL,
-        finished_at = NULL, error = '累计 3 个 HTTP 501，等待手动继续'
+        finished_at = NULL, error = '累计 3 次行情读取失败，等待手动继续'
       WHERE id = ${input.batchId} AND job_id = ${input.jobId} AND status = 'running'
         AND lease_token = ${input.leaseToken}::uuid
       RETURNING id
@@ -573,10 +601,10 @@ export async function pauseScreeningBatch(input: {
       UPDATE screening_jobs j SET status = 'paused', stage = '已暂停',
         candidates = ${tx.json(input.candidates)}, watch = ${tx.json(input.candidateTop10)},
         exclusions = ${tx.json(input.aggregatedExclusions)},
-        rate_limit_501_count = j.rate_limit_501_count + ${input.rateLimit501Delta},
+        rate_limit_501_count = j.rate_limit_501_count + ${input.pauseFailureDelta},
         processed = totals.processed, scored = totals.scored, failed_count = totals.failed_count,
         data_date = COALESCE(j.data_date, totals.data_date),
-        error = '行情接口累计返回 3 个 HTTP 501，扫描已暂停。点击继续后将优先重试失败股票。',
+        error = '行情读取累计失败 3 次，扫描已暂停。点击继续后将优先重试失败股票。',
         elapsed_ms = floor(extract(epoch FROM (now() - j.created_at)) * 1000)::bigint,
         expires_at = now() + interval '3 days'
       FROM (
@@ -598,7 +626,10 @@ export async function resumePausedScreeningJob(jobId: string) {
       error = NULL, expires_at = now() + interval '3 days'
     WHERE id = ${jobId} AND status = 'paused' RETURNING id
   `;
-  if (!rows.length) return null;
+  if (!rows.length) {
+    const current = await getScreeningJobRow(jobId);
+    return current?.status === "running" ? current : null;
+  }
   return getScreeningJobRow(jobId);
 }
 

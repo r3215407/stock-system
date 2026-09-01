@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { PositionTradeRecord } from "../lib/position-plan.ts";
-import { calculatePositionPerformance } from "../lib/position-performance.ts";
+import { calculatePortfolioReturnSummary, calculatePositionPerformance } from "../lib/position-performance.ts";
 
 function trade(overrides: Partial<PositionTradeRecord> = {}): PositionTradeRecord {
   return {
@@ -61,4 +61,28 @@ test("基准缺失时保留策略指标并隐藏累计基准", () => {
   assert.equal(report.cumulativeExcessReturn, null);
   assert.equal(report.pathSuccessRate, null);
   assert.equal(report.sharpe, null);
+});
+
+test("组合收益合并已实现和当前持仓并按自然日年化", () => {
+  const summary = calculatePortfolioReturnSummary(10_000, [trade()], [{
+    purchaseDate: "2026-01-10",
+    valuationDate: "2026-02-01",
+    averageCost: 10,
+    currentPrice: 11,
+    actualShares: 100,
+  }]);
+  assert.equal(summary.heldProfit, 100);
+  assert.equal(summary.heldReturn, 0.1);
+  assert.equal(summary.cumulativeProfit, 190);
+  assert.equal(summary.cumulativeReturn, 0.019);
+  assert.equal(summary.elapsedDays, 30);
+  assert.ok(Math.abs((summary.annualizedReturn ?? 0) - ((1.019 ** (365 / 30)) - 1)) < 1e-12);
+});
+
+test("没有成交时收益为零且不展示年化", () => {
+  const summary = calculatePortfolioReturnSummary(100_000, [], []);
+  assert.equal(summary.heldProfit, 0);
+  assert.equal(summary.heldReturn, null);
+  assert.equal(summary.cumulativeReturn, 0);
+  assert.equal(summary.annualizedReturn, null);
 });

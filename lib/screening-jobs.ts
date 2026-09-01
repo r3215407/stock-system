@@ -22,6 +22,7 @@ import {
   initializeScreeningBatches,
   loadScreeningAggregation,
   pauseScreeningBatch,
+  pauseScreeningJobAfterFailures,
   releaseScreeningInitialization,
   releaseScreeningBatch,
   resumePausedScreeningJob,
@@ -31,7 +32,7 @@ import {
   type ScreeningBatchSecurity,
 } from "@/lib/screening-db";
 import {
-  HTTP_501_PAUSE_THRESHOLD,
+  SCREENING_FAILURE_PAUSE_THRESHOLD,
   describeScreeningFailure,
   isChiNextCode,
   rankCandidateResults,
@@ -501,13 +502,13 @@ export async function submitBrowserScreeningWork(input: {
     exclusions.set("上市不足250个交易日", (exclusions.get("上市不足250个交易日") ?? 0) + shortHistorySymbols.length);
   }
 
-  const rateLimit501Delta = failures.filter((failure) => failure.errorCode === "HTTP_501").length;
+  const pauseFailureDelta = failures.length;
   if (input.paused) {
-    if (batch.rateLimit501Count + rateLimit501Delta < HTTP_501_PAUSE_THRESHOLD
-      || unprocessed.length === 0 && failures.length < 1) throw new Error("暂停提交尚未达到 HTTP 501 阈值或缺少待重试标的。");
+    if (batch.pauseFailureCount + pauseFailureDelta < SCREENING_FAILURE_PAUSE_THRESHOLD
+      || unprocessed.length === 0 && failures.length < 1) throw new Error("暂停提交尚未达到行情失败阈值或缺少待重试标的。");
     const retrySecurities: ScreeningBatchFailure[] = [
       ...failures,
-      ...unprocessed.map((security) => ({ ...security, errorCode: "PAUSED_UNPROCESSED", errorMessage: "达到 HTTP 501 暂停阈值前尚未查询。" })),
+      ...unprocessed.map((security) => ({ ...security, errorCode: "PAUSED_UNPROCESSED", errorMessage: "达到行情失败暂停阈值前尚未查询。" })),
     ];
     const aggregation = await loadScreeningAggregation(batch.jobId);
     const aggregateResults = aggregation.batches.flatMap((item) => item.batchId === batch.batchId ? results : item.results);
@@ -526,7 +527,7 @@ export async function submitBrowserScreeningWork(input: {
       processed: Math.max(0, batch.totalCount - unprocessed.length),
       failedCount: failures.length,
       dataDate: batch.previousDataDate ?? input.dataDate,
-      rateLimit501Delta,
+      pauseFailureDelta,
       candidates: rankScreeningResults(aggregateResults, strategy.outputConfig.topN),
       candidateTop10: rankCandidateResults(aggregateResults, strategy.outputConfig.topN),
       aggregatedExclusions: [...aggregateExclusions].map(([reason, count]) => ({ reason, count })).sort((a, b) => b.count - a.count),
@@ -545,7 +546,7 @@ export async function submitBrowserScreeningWork(input: {
     failedCount: failures.length,
     failedSecurities: failures,
     dataDate: batch.previousDataDate ?? input.dataDate,
-    rateLimit501Delta,
+    pauseFailureDelta,
   });
   await finalizeReadyScreeningJob(batch.jobId);
   return { processed: true as const, batchId: batch.batchId };
@@ -561,4 +562,8 @@ export async function cancelScreeningJob(jobId: string) {
 
 export async function resumeScreeningJob(jobId: string) {
   return (await resumePausedScreeningJob(jobId)) ?? undefined;
+}
+
+export async function pauseScreeningJobForWorkerFailures(jobId: string) {
+  return (await pauseScreeningJobAfterFailures(jobId)) ?? undefined;
 }

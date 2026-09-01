@@ -5,10 +5,11 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import styles from "@/app/operational.module.css";
-import { BrowserMarketDataError, fetchBrowserMarketBars } from "@/lib/browser-market-data";
+import { fetchBrowserMarketBars } from "@/lib/browser-market-data";
 import { ScreeningHistoryError, evaluateScreeningSecurity } from "@/lib/screening-evaluator";
 import {
-  accumulateHttp501Failures,
+  accumulateScreeningFailures,
+  accumulateScreeningWorkerFailures,
   describeScreeningFailure,
   type BrowserScreeningBatch,
   type BrowserScreeningWork,
@@ -20,7 +21,7 @@ import { currentStrategy, getStrategy } from "@/lib/strategies";
 import type { PositionPlanRecord } from "@/lib/position-plan";
 
 const ACTIVE_SCREENING_JOB_KEY = "glacier-active-screening-job";
-const BROWSER_MARKET_WORKERS = 6;
+const BROWSER_MARKET_WORKERS = 3;
 
 function money(value: number) { return value >= 100_000_000 ? `${(value / 100_000_000).toFixed(1)}亿` : `${(value / 10_000).toFixed(0)}万`; }
 function recordTime(value: string | null) {
@@ -37,7 +38,7 @@ async function processBrowserBatch(
   batch: BrowserScreeningBatch,
   signal: AbortSignal,
   onProgress: (processed: number, total: number) => void,
-  startingHttp501Count: number,
+  startingFailureCount: number,
 ) {
   const strategy = getStrategy(batch.strategyId, batch.strategyVersion);
   if (!strategy || strategy.status === "disabled") throw new Error("当前浏览器找不到该扫描策略，请刷新页面后重试。");
@@ -47,7 +48,7 @@ async function processBrowserBatch(
   let dataDate: string | null = null;
   let cursor = 0;
   let processed = 0;
-  let http501Count = startingHttp501Count;
+  let pauseFailureCount = startingFailureCount;
   let paused = false;
   const covered = new Set<string>();
   const batchController = new AbortController();
@@ -77,11 +78,11 @@ async function processBrowserBatch(
         } else {
           failures.push({ symbol: security.symbol, ...describeScreeningFailure(caught) });
           covered.add(security.symbol);
-          const next = accumulateHttp501Failures(http501Count, caught instanceof BrowserMarketDataError ? caught.httpStatus : null);
-          http501Count = next.count;
+          const next = accumulateScreeningFailures(pauseFailureCount);
+          pauseFailureCount = next.count;
           if (next.shouldPause) {
             paused = true;
-            batchController.abort(new DOMException("HTTP 501 暂停阈值已达到", "AbortError"));
+            batchController.abort(new DOMException("行情失败暂停阈值已达到", "AbortError"));
           }
         }
       } finally {
@@ -96,7 +97,7 @@ async function processBrowserBatch(
   finally { signal.removeEventListener("abort", abortFromParent); }
   if (signal.aborted) throw signal.reason ?? new DOMException("扫描已取消", "AbortError");
   const unprocessedSymbols = batch.securities.filter((security) => !covered.has(security.symbol)).map((security) => security.symbol);
-  return { results, failures, shortHistorySymbols, unprocessedSymbols, dataDate, paused, http501Count };
+  return { results, failures, shortHistorySymbols, unprocessedSymbols, dataDate, paused, pauseFailureCount };
 }
 
 export default function ScreeningWorkspace() {
@@ -143,7 +144,7 @@ export default function ScreeningWorkspace() {
     let timer: number | undefined;
     let controller: AbortController | undefined;
     let failures = 0;
-    let http501Count = job.rateLimit501Count ?? 0;
+    let pauseFailureCount = job.pauseFailureCount ?? 0;
     let pendingCompletion: Record<string, unknown> | null = null;
     async function driveNextWork() {
       let permanentFailure = false;
@@ -170,16 +171,14 @@ export default function ScreeningWorkspace() {
         }
         pendingCompletion = null;
         if (submittingPending) setBrowserProgress(null);
-        failures = 0;
-        setError(null);
         let nextJob = payload.data as ScreeningJob;
         const work = payload.work as BrowserScreeningWork | undefined;
         if (work?.kind === "BATCH") {
           setBrowserProgress({ processed: 0, total: work.securities.length });
           const completed = await processBrowserBatch(work, controller.signal, (processed, total) => {
             setBrowserProgress({ processed, total });
-          }, http501Count);
-          http501Count = completed.http501Count;
+          }, pauseFailureCount);
+          pauseFailureCount = completed.pauseFailureCount;
           pendingCompletion = {
             action: completed.paused ? "pause" : "complete",
             batchId: work.batchId,
@@ -200,10 +199,12 @@ export default function ScreeningWorkspace() {
           }
           pendingCompletion = null;
           nextJob = completePayload.data as ScreeningJob;
-          http501Count = nextJob.rateLimit501Count ?? http501Count;
+          pauseFailureCount = nextJob.pauseFailureCount ?? pauseFailureCount;
           setBrowserProgress(null);
         }
         if (work?.kind === "IDLE" && nextJob.status === "running") delay = 5_000;
+        failures = 0;
+        setError(null);
         finished = nextJob.status !== "running";
         setJob(nextJob);
       } catch (caught) {
@@ -215,7 +216,29 @@ export default function ScreeningWorkspace() {
           setJob((current) => current ? { ...current, status: "failed", stage: "失败", error: message } : current);
           return;
         }
-        failures += 1;
+        const nextFailure = accumulateScreeningWorkerFailures(failures);
+        failures = nextFailure.count;
+        if (nextFailure.shouldPause) {
+          finished = true;
+          pendingCompletion = null;
+          setBrowserProgress(null);
+          const pauseMessage = `${message}，已连续失败 3 次，扫描已暂停并保留当前结果。点击继续后再恢复扫描。`;
+          try {
+            const pauseResponse = await fetch(`/api/screenings/${jobId}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ action: "pause_after_failures" }),
+            });
+            const pausePayload = await pauseResponse.json().catch(() => ({}));
+            if (!pauseResponse.ok) throw new Error(pausePayload.error?.message ?? `暂停接口返回 ${pauseResponse.status}`);
+            setJob(pausePayload.data);
+            setError(null);
+          } catch {
+            setJob((current) => current ? { ...current, status: "paused", stage: "已暂停", error: pauseMessage } : current);
+            setError(null);
+          }
+          return;
+        }
         delay = Math.min(15_000, 2_000 * 2 ** Math.min(failures, 3));
         setError(`${message}，保持页面打开，${Math.ceil(delay / 1000)} 秒后自动重试（第 ${failures} 次）。`);
       } finally {
@@ -339,7 +362,9 @@ export default function ScreeningWorkspace() {
         ? `浏览器正在读取当前分片：${browserProgress.processed}/${browserProgress.total}。请保持页面打开；网络中断后会自动重试。`
         : "正在领取下一批股票。关闭页面后任务暂停，重新打开后将从 PostgreSQL 记录继续。"
       : job?.status === "paused"
-        ? `行情接口累计返回 ${job.rateLimit501Count} 个 HTTP 501，已保留当前双榜。继续后优先重试失败及未查询股票。`
+        ? job.pauseFailureCount >= 3
+          ? `行情读取累计失败 ${job.pauseFailureCount} 次，已保留当前双榜。继续后优先重试失败及未查询股票。`
+          : "扫描连续处理失败 3 次，已保留当前结果。点击继续后再恢复扫描。"
       : job?.status === "completed" && job.failedCount > 0
         ? `本次有 ${job.failedCount} 只未完成评分；再次点击只重试失败股票，已成功结果会保留。`
         : "评分榜用于比较，候选榜用于规划买入；两个榜单各不超过 10 只。";
@@ -368,7 +393,7 @@ export default function ScreeningWorkspace() {
       </aside>
     </header>
     <section className={styles.section} aria-labelledby="today-candidates"><header className={styles.sectionHeader}><h2 id="today-candidates">评分与候选双榜</h2><p>评分榜比较全市场相对强弱；候选榜只保留全部门槛和转强触发均通过的股票。</p></header>
-      {job?.status === "paused" ? <div className={styles.pauseSnapshot}><strong>当前 TOP 快照</strong><p>已完成 {job.scored} 只股票，累计 {job.rateLimit501Count} 个 HTTP 501。以下排名基于暂停前成功返回的数据，继续扫描后会自动更新。</p></div> : null}
+      {job?.status === "paused" ? <div className={styles.pauseSnapshot}><strong>当前 TOP 快照</strong><p>已完成 {job.scored} 只股票。以下排名基于暂停前成功返回的数据，继续扫描后会自动更新。</p></div> : null}
       {!job ? <div className={styles.emptyResult}>尚无扫描结果。完成扫描后，这里显示评分 TOP 10 与候选 TOP 10。</div> : null}
       {job ? <div><div className={styles.summaryStrip}><div className={styles.summaryValues}><span>全市场 <b>{job.universeTotal || "—"}</b></span><span>基础过滤后 <b>{job.afterBasicFilter || "—"}</b></span><span>完成评分 <b>{job.scored}</b></span><span>评分榜 <b>{scoreTop10.length}</b></span><span>候选榜 <b>{candidateTop10.length}</b></span><span>数据失败 <b>{job.failedCount}</b></span><span>耗时 <b>{(job.elapsedMs/1000).toFixed(1)}秒</b></span><span>记录 <b>{job.cacheHit ? "已有记录" : "本次生成"}</b></span></div>{job.incomplete ? <p className={styles.warning}>数据失败超过 5%，仍返回已成功评分的双榜，但本次排名可能不完整。</p> : null}</div>{job.failedCount > 0 ? <FailureDetails failures={job.failures ?? []} reportedCount={job.failedCount} total={job.failureDetailsTotal ?? job.failures?.length ?? 0}/> : null}<div className={styles.tabs}>{([['score','评分 TOP 10'],['candidate','候选 TOP 10'],['excluded','未达标原因']] as const).map(([value,label])=><button className={`${styles.tabButton} ${tab===value?styles.tabActive:""}`} key={value} onClick={()=>{setTab(value);setSelected([]);}}>{label}</button>)}{selected.length ? <button className={`${styles.tabButton} ${styles.planAction}`} disabled={savingPlan} onClick={()=>addCandidatesToPlan(selectedCandidates)}>{savingPlan ? "正在写入…" : `为已选 ${selected.length} 只规划仓位`}</button>:null}</div>{tab === "excluded" ? <div className={styles.exclusionGrid}>{job.exclusions.map((item)=><div className={styles.exclusion} key={item.reason}><span>{item.reason}</span><b>{item.count}</b></div>)}</div>:<CandidateList candidates={list} detail={setDetail} selected={selected} setSelected={setSelected}/>}<p className={styles.footerNote}>数据截止 {job.dataDate ?? "读取中"} · {job.adjustment} · {job.provider} · 策略 {job.strategyVersion} / 参数 {job.parameterVersion}。评分 TOP 10 只表示相对排名；只有候选状态可以加入仓位方案。</p></div>:null}
     </section>
