@@ -65,14 +65,36 @@ export default function PositionPlanner({ encodedItems: _encodedItems }: { encod
   useEffect(() => {
     if (!record) return;
     let active = true;
+    let retryTimer: number | undefined;
+    const controller = new AbortController();
     const held = record.items.filter((item) => item.positionState === "held" && item.averageCost && item.actualShares && item.purchaseDate);
-    Promise.all(held.map(async (item) => {
-      const response = await fetch("/api/positions/status", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ symbol: item.symbol, purchaseDate: item.purchaseDate, averageCost: item.averageCost, actualShares: item.actualShares, initialStopPrice: item.initialStopPrice }) });
-      const payload = await response.json() as HoldingStatus & { message?: string };
-      if (!response.ok) throw { id: item.id, message: payload.message ?? "行情状态计算失败" };
-      return { id: item.id, status: payload };
-    })).then((results) => { if (active) { setStatuses(Object.fromEntries(results.map((result) => [result.id, result.status]))); setStatusErrors({}); } }).catch((error: { id?: string; message?: string }) => { if (active && error.id) setStatusErrors((current) => ({ ...current, [error.id!]: error.message ?? "行情状态计算失败" })); });
-    return () => { active = false; };
+    const pending = new Map(held.map((item) => [item.id, item]));
+
+    async function loadPending() {
+      const batch = [...pending.values()];
+      const results = await Promise.allSettled(batch.map(async (item) => {
+        const response = await fetch("/api/positions/status", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ symbol: item.symbol, purchaseDate: item.purchaseDate, averageCost: item.averageCost, actualShares: item.actualShares, initialStopPrice: item.initialStopPrice }), signal: controller.signal });
+        const payload = await response.json() as HoldingStatus & { message?: string };
+        if (!response.ok) throw new Error(payload.message ?? "行情状态计算失败");
+        return { id: item.id, status: payload };
+      }));
+      if (!active) return;
+      results.forEach((result, index) => {
+        const item = batch[index];
+        if (!item) return;
+        if (result.status === "fulfilled") {
+          pending.delete(item.id);
+          setStatuses((current) => ({ ...current, [item.id]: result.value.status }));
+          setStatusErrors((current) => { const next = { ...current }; delete next[item.id]; return next; });
+        } else {
+          setStatusErrors((current) => ({ ...current, [item.id]: result.reason instanceof Error ? result.reason.message : "行情状态计算失败" }));
+        }
+      });
+      if (pending.size) retryTimer = window.setTimeout(loadPending, 5_000);
+    }
+
+    void loadPending();
+    return () => { active = false; controller.abort(); if (retryTimer !== undefined) window.clearTimeout(retryTimer); };
   }, [heldStatusKey]);
 
   const heldItems = record?.items.filter((item) => item.positionState === "held") ?? [];
