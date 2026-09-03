@@ -11,9 +11,13 @@ export async function GET(request: Request) {
   if (!secret || request.headers.get("authorization") !== `Bearer ${secret}`) {
     return Response.json({ error: "UNAUTHORIZED" }, { status: 401 });
   }
-  const businessDate = shanghaiBusinessClock().date;
+  const clock = shanghaiBusinessClock();
+  const businessDate = clock.date;
   if (!isChinaTradingDay(businessDate)) {
     return Response.json({ processed: false, reason: "NON_TRADING_DAY", businessDate });
+  }
+  if (clock.time < "15:30:00") {
+    return Response.json({ processed: false, reason: "BEFORE_SCREENING_WINDOW", businessDate });
   }
   try {
     const result = await prepareScreeningJob(currentStrategy, null, {

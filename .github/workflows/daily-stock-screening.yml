@@ -1,0 +1,66 @@
+name: Daily stock screening
+
+on:
+  schedule:
+    # GitHub Actions uses UTC. 07:40 UTC is 15:40 in Asia/Shanghai.
+    - cron: "40 7 * * 1-5"
+  workflow_dispatch:
+
+concurrency:
+  group: daily-stock-screening
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      VERCEL_APP_URL: ${{ secrets.VERCEL_APP_URL }}
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+    steps:
+      - name: Run server-side screening batches
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${VERCEL_APP_URL}" || -z "${CRON_SECRET}" ]]; then
+            echo "VERCEL_APP_URL and CRON_SECRET repository secrets are required."
+            exit 1
+          fi
+
+          base_url="${VERCEL_APP_URL%/}"
+          auth_header="Authorization: Bearer ${CRON_SECRET}"
+          start_response="$(curl --fail-with-body --silent --show-error \
+            --retry 3 --retry-all-errors --max-time 290 \
+            -H "${auth_header}" \
+            "${base_url}/api/cron/stock-screening")"
+          echo "Start: $(jq -c '{processed, reason, businessDate, job: (.job | {jobId, status, stage})}' <<<"${start_response}")"
+
+          start_reason="$(jq -r '.reason // empty' <<<"${start_response}")"
+          if [[ "${start_reason}" == "NON_TRADING_DAY" || "${start_reason}" == "BEFORE_SCREENING_WINDOW" ]]; then
+            echo "Screening skipped: ${start_reason}."
+            exit 0
+          fi
+
+          job_id="$(jq -er '.job.jobId' <<<"${start_response}")"
+          for batch_number in $(seq 1 200); do
+            worker_response="$(curl --fail-with-body --silent --show-error \
+              --retry 3 --retry-all-errors --max-time 290 \
+              -H "${auth_header}" \
+              "${base_url}/api/cron/stock-screening-worker?jobId=${job_id}")"
+            echo "Batch ${batch_number}: $(jq -c '{processed, kind, reason, batchId, completed, finalized}' <<<"${worker_response}")"
+
+            reason="$(jq -r '.reason // empty' <<<"${worker_response}")"
+            completed="$(jq -r '.completed // false' <<<"${worker_response}")"
+            if [[ "${reason}" == "NO_PENDING_BATCH" || "${completed}" == "true" ]]; then
+              echo "Screening job ${job_id} completed."
+              exit 0
+            fi
+            sleep 2
+          done
+
+          echo "Screening job ${job_id} did not finish within 200 worker batches."
+          exit 1

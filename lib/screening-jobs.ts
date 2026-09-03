@@ -46,7 +46,7 @@ import { getStrategy, type StrategyDefinition } from "@/lib/strategies";
 const UNIVERSE_API_HOSTS = ["push2.eastmoney.com", "82.push2.eastmoney.com"] as const;
 const UNIVERSE_FETCH_ATTEMPTS = 2;
 const BATCH_SIZE = 32;
-const DEFAULT_SECURITY_WORKERS = 6;
+const DEFAULT_SECURITY_WORKERS = 3;
 const configuredSecurityWorkers = Number(process.env.SCREENING_SECURITY_WORKERS ?? DEFAULT_SECURITY_WORKERS);
 const SECURITY_WORKERS = Number.isFinite(configuredSecurityWorkers)
   ? Math.min(6, Math.max(1, Math.floor(configuredSecurityWorkers)))
