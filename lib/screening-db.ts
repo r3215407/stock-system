@@ -355,6 +355,31 @@ export async function getScreeningJobRow(jobId: string) {
   });
 }
 
+export async function restartCancelledScreeningJob(jobId: string) {
+  await ensureScreeningSchema();
+  const sql = database();
+  const restarted = await sql.begin(async (tx) => {
+    const rows = await tx<{ initializationStatus: "pending" | "running" | "completed" }[]>`
+      UPDATE screening_jobs SET status = 'running',
+        stage = CASE WHEN initialization_status = 'completed' THEN '读取日线' ELSE '获取证券池' END,
+        initialization_status = CASE WHEN initialization_status = 'completed' THEN 'completed' ELSE 'pending' END,
+        initialization_attempts = CASE WHEN initialization_status = 'completed' THEN initialization_attempts ELSE 0 END,
+        initialization_lease_until = NULL, initialization_lease_token = NULL,
+        generated_at = NULL, error = NULL, expires_at = now() + interval '3 days'
+      WHERE id = ${jobId} AND status = 'cancelled'
+      RETURNING initialization_status AS "initializationStatus"
+    `;
+    if (!rows.length) return false;
+    await tx`
+      UPDATE screening_batches SET status = 'pending', attempts = 0,
+        lease_until = NULL, lease_token = NULL, finished_at = NULL, error = NULL
+      WHERE job_id = ${jobId} AND status = 'cancelled'
+    `;
+    return true;
+  });
+  return restarted ? getScreeningJobRow(jobId) : null;
+}
+
 export async function initializeScreeningBatches(input: {
   jobId: string;
   universeTotal: number;

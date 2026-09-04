@@ -26,6 +26,7 @@ import {
   pauseScreeningJobAfterFailures,
   releaseScreeningInitialization,
   releaseScreeningBatch,
+  restartCancelledScreeningJob,
   resumePausedScreeningJob,
   retryFailedScreeningJob,
   type ClaimedScreeningInitialization,
@@ -281,7 +282,13 @@ export async function prepareScreeningJob(
     businessDate: clock.date,
     provider: PROVIDER,
   });
-  if (!created.created) return { job: await getScreeningJobRow(created.jobId), created: false as const };
+  if (!created.created) {
+    const existing = await getScreeningJobRow(created.jobId);
+    if (existing?.status === "cancelled") {
+      return { job: await restartCancelledScreeningJob(created.jobId), created: false as const, restarted: true as const };
+    }
+    return { job: existing, created: false as const };
+  }
   return { job: await getScreeningJobRow(created.jobId), created: true as const };
 }
 

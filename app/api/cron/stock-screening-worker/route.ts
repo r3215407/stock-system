@@ -1,5 +1,5 @@
 import { isChinaTradingDay, shanghaiBusinessClock } from "@/lib/etf-rotation";
-import { processNextScreeningWork } from "@/lib/screening-jobs";
+import { getScreeningJob, processNextScreeningWork } from "@/lib/screening-jobs";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -25,7 +25,9 @@ export async function GET(request: Request) {
     return Response.json({ error: "INVALID_JOB_ID" }, { status: 400 });
   }
   try {
-    return Response.json(await processNextScreeningWork(jobId));
+    const result = await processNextScreeningWork(jobId);
+    const job = jobId ? await getScreeningJob(jobId) : undefined;
+    return Response.json({ ...result, jobStatus: job?.status ?? null });
   } catch (error) {
     console.error("Stock screening worker failed", error instanceof Error ? error.message : "unknown error");
     return Response.json({ error: "SCREENING_WORKER_FAILED" }, { status: 500 });

@@ -38,7 +38,7 @@ jobs:
             --connect-timeout 20 --max-time 290 \
             -H "${auth_header}" \
             "${base_url}/api/cron/stock-screening")"
-          echo "Start: $(jq -c '{processed, reason, businessDate, job: (.job | {jobId, status, stage})}' <<<"${start_response}")"
+          echo "Start: $(jq -c '{processed, restarted, reason, businessDate, job: (.job | {jobId, status, stage})}' <<<"${start_response}")"
 
           start_reason="$(jq -r '.reason // empty' <<<"${start_response}")"
           if [[ "${start_reason}" == "NON_TRADING_DAY" || "${start_reason}" == "BEFORE_SCREENING_WINDOW" ]]; then
@@ -47,19 +47,34 @@ jobs:
           fi
 
           job_id="$(jq -er '.job.jobId' <<<"${start_response}")"
+          job_status="$(jq -r '.job.status // empty' <<<"${start_response}")"
+          if [[ "${job_status}" == "completed" ]]; then
+            echo "Screening job ${job_id} was already completed."
+            exit 0
+          fi
+          if [[ "${job_status}" != "running" ]]; then
+            echo "Screening job ${job_id} cannot run from status ${job_status}."
+            exit 1
+          fi
+
           for batch_number in $(seq 1 200); do
             worker_response="$(curl --fail-with-body --silent --show-error \
               --retry 5 --retry-all-errors --retry-delay 15 --retry-max-time 900 \
               --connect-timeout 20 --max-time 290 \
               -H "${auth_header}" \
               "${base_url}/api/cron/stock-screening-worker?jobId=${job_id}")"
-            echo "Batch ${batch_number}: $(jq -c '{processed, kind, reason, batchId, completed, finalized}' <<<"${worker_response}")"
+            echo "Batch ${batch_number}: $(jq -c '{processed, kind, reason, batchId, completed, finalized, jobStatus}' <<<"${worker_response}")"
 
             reason="$(jq -r '.reason // empty' <<<"${worker_response}")"
             completed="$(jq -r '.completed // false' <<<"${worker_response}")"
-            if [[ "${reason}" == "NO_PENDING_BATCH" || "${completed}" == "true" ]]; then
+            job_status="$(jq -r '.jobStatus // empty' <<<"${worker_response}")"
+            if [[ "${job_status}" == "completed" && ( "${reason}" == "NO_PENDING_BATCH" || "${completed}" == "true" ) ]]; then
               echo "Screening job ${job_id} completed."
               exit 0
+            fi
+            if [[ "${job_status}" != "running" ]]; then
+              echo "Screening job ${job_id} stopped with status ${job_status}."
+              exit 1
             fi
             echo "Waiting 10 seconds before the next batch."
             sleep 10
