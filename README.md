@@ -35,7 +35,7 @@ GitHub 仓库需要配置两个 Actions secrets：
 - `VERCEL_APP_URL`：生产环境根地址，例如 `https://example.vercel.app`。
 - `CRON_SECRET`：与 Vercel 生产环境中的同名变量使用相同值。
 
-Actions 页面的 `Daily stock screening` 也可手动运行。它先创建带当日幂等键的扫描任务，再逐个驱动该任务的 PostgreSQL 分片，直到生成双榜或达到安全上限。
+Actions 页面的 `Daily stock screening` 也可手动运行。它先创建带当日幂等键的扫描任务，再逐个驱动该任务的 PostgreSQL 分片，直到生成双榜或达到安全上限。正常分片之间等待 10 秒；worker 请求失败时最多重试 5 次，每次至少等待 15 秒，避免行情源或 Vercel 短暂异常时连续施压。
 
 `POST /api/screenings` 只创建 PostgreSQL 任务并立即返回 `202`；证券池和基准行情由浏览器发起的第一个工作单元读取。初始化任务与股票分片都有租约和最多三次重试。卡在“获取证券池”的任务会自动迁移为待初始化状态；重新点击扫描按钮即可返回并继续。
 

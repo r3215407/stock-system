@@ -34,7 +34,8 @@ jobs:
           base_url="${VERCEL_APP_URL%/}"
           auth_header="Authorization: Bearer ${CRON_SECRET}"
           start_response="$(curl --fail-with-body --silent --show-error \
-            --retry 3 --retry-all-errors --max-time 290 \
+            --retry 3 --retry-all-errors --retry-delay 10 --retry-max-time 600 \
+            --connect-timeout 20 --max-time 290 \
             -H "${auth_header}" \
             "${base_url}/api/cron/stock-screening")"
           echo "Start: $(jq -c '{processed, reason, businessDate, job: (.job | {jobId, status, stage})}' <<<"${start_response}")"
@@ -48,7 +49,8 @@ jobs:
           job_id="$(jq -er '.job.jobId' <<<"${start_response}")"
           for batch_number in $(seq 1 200); do
             worker_response="$(curl --fail-with-body --silent --show-error \
-              --retry 3 --retry-all-errors --max-time 290 \
+              --retry 5 --retry-all-errors --retry-delay 15 --retry-max-time 900 \
+              --connect-timeout 20 --max-time 290 \
               -H "${auth_header}" \
               "${base_url}/api/cron/stock-screening-worker?jobId=${job_id}")"
             echo "Batch ${batch_number}: $(jq -c '{processed, kind, reason, batchId, completed, finalized}' <<<"${worker_response}")"
@@ -59,7 +61,8 @@ jobs:
               echo "Screening job ${job_id} completed."
               exit 0
             fi
-            sleep 2
+            echo "Waiting 10 seconds before the next batch."
+            sleep 10
           done
 
           echo "Screening job ${job_id} did not finish within 200 worker batches."
