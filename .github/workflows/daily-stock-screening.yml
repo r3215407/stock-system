@@ -33,11 +33,14 @@ jobs:
 
           base_url="${VERCEL_APP_URL%/}"
           auth_header="Authorization: Bearer ${CRON_SECRET}"
-          start_response="$(curl --fail-with-body --silent --show-error \
+          if ! start_response="$(curl --fail-with-body --silent --show-error \
             --retry 3 --retry-all-errors --retry-delay 10 --retry-max-time 600 \
             --connect-timeout 20 --max-time 290 \
             -H "${auth_header}" \
-            "${base_url}/api/cron/stock-screening")"
+            "${base_url}/api/cron/stock-screening" 2>&1)"; then
+            echo "Start request failed: ${start_response}"
+            exit 1
+          fi
           echo "Start: $(jq -c '{processed, restarted, reason, businessDate, job: (.job | {jobId, status, stage})}' <<<"${start_response}")"
 
           start_reason="$(jq -r '.reason // empty' <<<"${start_response}")"
@@ -58,11 +61,14 @@ jobs:
           fi
 
           for batch_number in $(seq 1 200); do
-            worker_response="$(curl --fail-with-body --silent --show-error \
+            if ! worker_response="$(curl --fail-with-body --silent --show-error \
               --retry 5 --retry-all-errors --retry-delay 15 --retry-max-time 900 \
               --connect-timeout 20 --max-time 290 \
               -H "${auth_header}" \
-              "${base_url}/api/cron/stock-screening-worker?jobId=${job_id}")"
+              "${base_url}/api/cron/stock-screening-worker?jobId=${job_id}" 2>&1)"; then
+              echo "Worker request failed: ${worker_response}"
+              exit 1
+            fi
             echo "Batch ${batch_number}: $(jq -c '{processed, kind, reason, batchId, completed, finalized, jobStatus}' <<<"${worker_response}")"
 
             reason="$(jq -r '.reason // empty' <<<"${worker_response}")"
