@@ -303,6 +303,21 @@ export async function findActiveScreeningJob(
   return row ? toJob(row) : null;
 }
 
+export async function findLatestScreeningJob(
+  strategyId: string,
+  strategyVersion: string,
+  parameterVersion: string,
+) {
+  await ensureScreeningSchema();
+  const sql = database();
+  const [row] = await selectJob(sql, sql`
+    strategy_id = ${strategyId} AND strategy_version = ${strategyVersion} AND parameter_version = ${parameterVersion}
+    AND status IN ('running', 'paused', 'completed') AND expires_at > now()
+    ORDER BY created_at DESC LIMIT 1
+  `);
+  return row ? toJob(row, row.status === "completed") : null;
+}
+
 export async function createScreeningJobRow(input: {
   idempotencyKey: string;
   strategyId: string;

@@ -1,8 +1,19 @@
-import { prepareScreeningJob } from "@/lib/screening-jobs";
-import { getStrategy } from "@/lib/strategies";
+import { getCurrentScreeningJob, prepareScreeningJob } from "@/lib/screening-jobs";
+import { currentStrategy, getStrategy } from "@/lib/strategies";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
+
+export async function GET() {
+  try {
+    return Response.json(
+      { data: await getCurrentScreeningJob(currentStrategy) ?? null },
+      { headers: { "Cache-Control": "no-store" } },
+    );
+  } catch (error) {
+    return Response.json({ error: { code: "DATABASE_UNAVAILABLE", message: error instanceof Error ? `任务状态读取失败：${error.message}` : "任务状态读取失败。" } }, { status: 503 });
+  }
+}
 
 export async function POST(request: Request) {
   let body: { strategyId?: unknown; strategyVersion?: unknown; scanDate?: unknown };

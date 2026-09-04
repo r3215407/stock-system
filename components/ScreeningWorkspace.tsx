@@ -20,7 +20,6 @@ import {
 import { currentStrategy, getStrategy } from "@/lib/strategies";
 import type { PositionPlanRecord } from "@/lib/position-plan";
 
-const ACTIVE_SCREENING_JOB_KEY = "glacier-active-screening-job";
 const BROWSER_MARKET_WORKERS = 3;
 
 function money(value: number) { return value >= 100_000_000 ? `${(value / 100_000_000).toFixed(1)}亿` : `${(value / 10_000).toFixed(0)}万`; }
@@ -109,36 +108,35 @@ export default function ScreeningWorkspace() {
   const [tab, setTab] = useState<"score" | "candidate" | "excluded">("score");
   const [detail, setDetail] = useState<ScreeningCandidate | null>(null);
   const [browserProgress, setBrowserProgress] = useState<{ processed: number; total: number } | null>(null);
+  const [retryDrivingJobId, setRetryDrivingJobId] = useState<string | null>(null);
   const [savingPlan, setSavingPlan] = useState(false);
 
   useEffect(() => {
-    const storedJobId = window.localStorage.getItem(ACTIVE_SCREENING_JOB_KEY);
-    if (!storedJobId) return;
     const controller = new AbortController();
-    let expired = false;
-    fetch(`/api/screenings/${storedJobId}`, { cache: "no-store", signal: controller.signal })
-      .then(async (response) => {
+    let timer: number | undefined;
+    async function refresh() {
+      try {
+        const response = await fetch("/api/screenings", { cache: "no-store", signal: controller.signal });
         const payload = await response.json().catch(() => ({}));
-        expired = response.status === 410;
         if (!response.ok) throw new Error(payload.error?.message ?? `任务恢复接口返回 ${response.status}`);
-        setJob(payload.data);
-      })
-      .catch((caught) => {
+        setJob(payload.data ?? null);
+        setError(null);
+      } catch (caught) {
         if (controller.signal.aborted) return;
-        if (expired) window.localStorage.removeItem(ACTIVE_SCREENING_JOB_KEY);
-        setError(caught instanceof Error ? `上次扫描恢复失败：${caught.message}` : "上次扫描恢复失败，请重新启动。");
-      });
-    return () => controller.abort();
+        setError(caught instanceof Error ? `扫描进度读取失败：${caught.message}` : "扫描进度读取失败。");
+      } finally {
+        if (!controller.signal.aborted) timer = window.setTimeout(refresh, 5_000);
+      }
+    }
+    void refresh();
+    return () => {
+      controller.abort();
+      if (timer) window.clearTimeout(timer);
+    };
   }, []);
 
   useEffect(() => {
-    if (!job) return;
-    if (job.status === "running" || job.status === "paused") window.localStorage.setItem(ACTIVE_SCREENING_JOB_KEY, job.jobId);
-    else if (window.localStorage.getItem(ACTIVE_SCREENING_JOB_KEY) === job.jobId) window.localStorage.removeItem(ACTIVE_SCREENING_JOB_KEY);
-  }, [job?.jobId, job?.status]);
-
-  useEffect(() => {
-    if (!job || job.status !== "running") return;
+    if (!job || job.status !== "running" || retryDrivingJobId !== job.jobId) return;
     const jobId = job.jobId;
     let stopped = false;
     let timer: number | undefined;
@@ -206,12 +204,13 @@ export default function ScreeningWorkspace() {
         failures = 0;
         setError(null);
         finished = nextJob.status !== "running";
+        if (finished) setRetryDrivingJobId(null);
         setJob(nextJob);
       } catch (caught) {
         if (controller?.signal.aborted) return;
         const message = caught instanceof Error ? `扫描处理暂时中断：${caught.message}` : "扫描处理暂时中断，请检查网络连接。";
         if (permanentFailure) {
-          window.localStorage.removeItem(ACTIVE_SCREENING_JOB_KEY);
+          setRetryDrivingJobId(null);
           setError(message);
           setJob((current) => current ? { ...current, status: "failed", stage: "失败", error: message } : current);
           return;
@@ -220,6 +219,7 @@ export default function ScreeningWorkspace() {
         failures = nextFailure.count;
         if (nextFailure.shouldPause) {
           finished = true;
+          setRetryDrivingJobId(null);
           pendingCompletion = null;
           setBrowserProgress(null);
           const pauseMessage = `${message}，已连续失败 3 次，扫描已暂停并保留当前结果。点击继续后再恢复扫描。`;
@@ -253,45 +253,23 @@ export default function ScreeningWorkspace() {
       controller?.abort();
       if (timer) window.clearTimeout(timer);
     };
-  }, [job?.jobId, job?.status]);
+  }, [job?.jobId, job?.status, retryDrivingJobId]);
 
-  async function start() {
-    if (starting) return;
-    setStarting(true);
-    setError(null); setSelected([]); setDetail(null);
-    try {
-      const response = await fetch("/api/screenings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ strategyId: currentStrategy.strategyId, strategyVersion: currentStrategy.strategyVersion }) });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.error?.message ?? `扫描接口返回 ${response.status}`);
-      setJob(payload.data);
-    } catch (caught) { setError(caught instanceof Error ? `无法启动扫描：${caught.message}` : "无法启动扫描，请检查本地服务连接。"); }
-    finally { setStarting(false); }
-  }
-  async function cancel() {
-    if (!job) return;
-    try {
-      const response = await fetch(`/api/screenings/${job.jobId}`, { method: "DELETE" });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.error?.message ?? `取消接口返回 ${response.status}`);
-      setJob(payload.data);
-    }
-    catch (caught) { setError(caught instanceof Error ? `取消扫描失败：${caught.message}` : "取消扫描失败，请稍后重试。"); }
-  }
-
-  async function resume() {
-    if (!job || job.status !== "paused" || starting) return;
+  async function retry() {
+    if (!job || starting || (job.status !== "paused" && !(job.status === "completed" && job.failedCount > 0))) return;
     setStarting(true); setError(null); setSelected([]); setDetail(null);
     try {
       const response = await fetch(`/api/screenings/${job.jobId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "continue" }),
+        body: JSON.stringify({ action: job.status === "paused" ? "continue" : "retry_failures" }),
       });
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.error?.message ?? `继续接口返回 ${response.status}`);
+      if (!response.ok) throw new Error(payload.error?.message ?? `重试接口返回 ${response.status}`);
       setJob(payload.data);
+      setRetryDrivingJobId(payload.data.jobId);
     } catch (caught) {
-      setError(caught instanceof Error ? `继续扫描失败：${caught.message}` : "继续扫描失败，请稍后重试。");
+      setError(caught instanceof Error ? `重试失败：${caught.message}` : "重试失败，请稍后再试。");
     } finally { setStarting(false); }
   }
 
@@ -346,28 +324,27 @@ export default function ScreeningWorkspace() {
   const selectedCandidates = useMemo(() => candidateTop10.filter((item) => selected.includes(item.symbol)), [candidateTop10, selected]);
   const list = tab === "score" ? scoreTop10 : tab === "candidate" ? candidateTop10 : [];
   const generatedTime = recordTime(job?.generatedAt ?? null);
+  const canRetry = job?.status === "paused" || (job?.status === "completed" && job.failedCount > 0);
   const scanLabel = starting
-    ? job?.failedCount ? "正在重新排队失败数据…" : "正在创建扫描任务…"
-    : job?.status === "running"
-      ? `${job.stage} · ${job.processed + (browserProgress?.processed ?? 0)}/${job.afterBasicFilter || "—"}`
-      : job?.status === "paused"
-        ? `继续扫描并重试 · ${job.failedCount} 只`
-      : job?.status === "completed" && job.failedCount > 0
-        ? `重试失败数据 · ${job.failedCount}`
-        : job?.status === "completed" ? "再次读取策略结果" : "扫描全市场";
+    ? "正在重新排队失败数据…"
+    : job?.status === "paused"
+      ? `重试未完成数据 · ${job.failedCount} 只`
+      : `重试失败数据 · ${job?.failedCount ?? 0} 只`;
   const scanStatus = starting
-    ? "正在连接 PostgreSQL，任务创建后将由当前浏览器开始处理。"
+    ? "正在复用原扫描任务并重新排队失败数据。"
     : job?.status === "running"
       ? browserProgress
-        ? `浏览器正在读取当前分片：${browserProgress.processed}/${browserProgress.total}。请保持页面打开；网络中断后会自动重试。`
-        : "正在领取下一批股票。关闭页面后任务暂停，重新打开后将从 PostgreSQL 记录继续。"
+        ? `正在重试当前分片：${browserProgress.processed}/${browserProgress.total}。重试期间请保持页面打开。`
+        : `服务端正在执行 ${job.stage}：${job.processed}/${job.afterBasicFilter || "—"}。页面会自动刷新进度，可以安全关闭。`
       : job?.status === "paused"
         ? job.pauseFailureCount >= 3
-          ? `行情读取累计失败 ${job.pauseFailureCount} 次，已保留当前双榜。继续后优先重试失败及未查询股票。`
-          : "扫描连续处理失败 3 次，已保留当前结果。点击继续后再恢复扫描。"
+          ? `行情读取累计失败 ${job.pauseFailureCount} 次，已保留当前双榜。可重试失败及未查询股票。`
+          : "扫描已暂停并保留当前结果，可重试未完成数据。"
       : job?.status === "completed" && job.failedCount > 0
-        ? `本次有 ${job.failedCount} 只未完成评分；再次点击只重试失败股票，已成功结果会保留。`
-        : "评分榜用于比较，候选榜用于规划买入；两个榜单各不超过 10 只。";
+        ? `本次有 ${job.failedCount} 只未完成评分；重试只处理失败股票，已成功结果会保留。`
+        : job?.status === "completed"
+          ? "扫描已完成。评分榜用于比较，候选榜用于规划买入。"
+          : "等待每日服务端扫描任务，页面不会创建新的全市场任务。";
 
   return <main className={styles.page}><div className={styles.shell}>
     <header className={`${styles.hero} ${styles.scanHero}`}>
@@ -379,10 +356,9 @@ export default function ScreeningWorkspace() {
           <div><dt>范围</dt><dd>沪深主板 · 暂不含创业板</dd></div>
           <div><dt>输出</dt><dd>双榜各 10 只</dd></div>
         </dl>
-        <div className={styles.scanActions}>
-          <button aria-busy={starting || job?.status === "running"} className={styles.primaryButton} disabled={starting || job?.status === "running"} onClick={job?.status === "paused" ? resume : start}>{scanLabel}</button>
-          {job?.status === "running" || job?.status === "paused" ? <button className={styles.secondaryButton} onClick={cancel}>取消扫描</button> : null}
-        </div>
+        {canRetry ? <div className={styles.scanActions}>
+          <button aria-busy={starting} className={styles.primaryButton} disabled={starting} onClick={retry}>{scanLabel}</button>
+        </div> : null}
         <p aria-live="polite" className={styles.scanStatus}>{scanStatus}</p>
         {job?.status === "paused" ? <p className={styles.pauseNotice}>{job.error}</p> : error || job?.error ? <p className={styles.scanError}>{error ?? job?.error}</p> : null}
       </section>

@@ -1,4 +1,4 @@
-import { cancelScreeningJob, getScreeningJob, pauseScreeningJobForWorkerFailures, resumeScreeningJob } from "@/lib/screening-jobs";
+import { cancelScreeningJob, getScreeningJob, pauseScreeningJobForWorkerFailures, resumeScreeningJob, retryScreeningJobFailures } from "@/lib/screening-jobs";
 
 export const dynamic = "force-dynamic";
 
@@ -28,14 +28,20 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ jo
   const { jobId } = await params;
   try {
     const body = await request.json().catch(() => ({})) as { action?: unknown };
-    if (body.action !== "continue" && body.action !== "pause_after_failures") {
+    if (body.action !== "continue" && body.action !== "pause_after_failures" && body.action !== "retry_failures") {
       return Response.json({ error: { code: "INVALID_ACTION", message: "不支持该扫描任务操作。" } }, { status: 400 });
     }
     const job = body.action === "continue"
       ? await resumeScreeningJob(jobId)
-      : await pauseScreeningJobForWorkerFailures(jobId);
+      : body.action === "retry_failures"
+        ? await retryScreeningJobFailures(jobId)
+        : await pauseScreeningJobForWorkerFailures(jobId);
     if (!job) {
-      const message = body.action === "continue" ? "任务不存在或当前不是暂停状态。" : "任务不存在或当前不是运行状态。";
+      const message = body.action === "continue"
+        ? "任务不存在或当前不是暂停状态。"
+        : body.action === "retry_failures"
+          ? "任务不存在、尚未完成或没有可重试的失败数据。"
+          : "任务不存在或当前不是运行状态。";
       return Response.json({ error: { code: "JOB_STATE_CONFLICT", message } }, { status: 409 });
     }
     return Response.json({ data: job }, { headers: { "Cache-Control": "no-store" } });

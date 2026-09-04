@@ -16,6 +16,7 @@ import {
   failScreeningJob,
   findActiveScreeningJob,
   findFinalizableScreeningJobs,
+  findLatestScreeningJob,
   getClaimedScreeningBatch,
   findReusableScreeningJob,
   getScreeningJobRow,
@@ -554,6 +555,16 @@ export async function submitBrowserScreeningWork(input: {
 
 export async function getScreeningJob(jobId: string) {
   return (await getScreeningJobRow(jobId)) ?? undefined;
+}
+
+export async function getCurrentScreeningJob(strategy: StrategyDefinition) {
+  return await findLatestScreeningJob(
+    strategy.strategyId, strategy.strategyVersion, strategy.parameterVersion,
+  ) ?? undefined;
+}
+
+export async function retryScreeningJobFailures(jobId: string) {
+  return (await retryFailedScreeningJob(jobId)) ?? undefined;
 }
 
 export async function cancelScreeningJob(jobId: string) {
