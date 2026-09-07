@@ -62,18 +62,22 @@ jobs:
 
           for batch_number in $(seq 1 200); do
             if ! worker_response="$(curl --fail-with-body --silent --show-error \
-              --retry 5 --retry-all-errors --retry-delay 15 --retry-max-time 900 \
               --connect-timeout 20 --max-time 290 \
               -H "${auth_header}" \
               "${base_url}/api/cron/stock-screening-worker?jobId=${job_id}" 2>&1)"; then
               echo "Worker request failed: ${worker_response}"
               exit 1
             fi
-            echo "Batch ${batch_number}: $(jq -c '{processed, kind, reason, batchId, completed, finalized, jobStatus}' <<<"${worker_response}")"
+            echo "Batch ${batch_number}: $(jq -c '{processed, kind, reason, batchId, completed, failedCount, finalized, jobStatus}' <<<"${worker_response}")"
 
             reason="$(jq -r '.reason // empty' <<<"${worker_response}")"
             completed="$(jq -r '.completed // false' <<<"${worker_response}")"
+            failed_count="$(jq -r '.failedCount // 0' <<<"${worker_response}")"
             job_status="$(jq -r '.jobStatus // empty' <<<"${worker_response}")"
+            if (( failed_count > 0 )); then
+              echo "Batch ${batch_number} has ${failed_count} stock detail fetch failure(s); stopping immediately."
+              exit 1
+            fi
             if [[ "${job_status}" == "completed" && ( "${reason}" == "NO_PENDING_BATCH" || "${completed}" == "true" ) ]]; then
               echo "Screening job ${job_id} completed."
               exit 0

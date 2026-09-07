@@ -385,7 +385,13 @@ export async function processNextScreeningBatch(jobId?: string) {
       failedSecurities, dataDate,
     });
     const completed = await finalizeScreeningJob(batch.jobId, strategy);
-    return { processed: true as const, jobId: batch.jobId, batchId: batch.batchId, completed };
+    return {
+      processed: true as const,
+      jobId: batch.jobId,
+      batchId: batch.batchId,
+      completed,
+      failedCount: failedSecurities.length,
+    };
   } catch (error) {
     await releaseScreeningBatch(batch, error);
     await finalizeScreeningJob(batch.jobId, strategy);
