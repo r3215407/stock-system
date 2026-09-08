@@ -505,6 +505,39 @@ export async function pauseScreeningJobAfterFailures(jobId: string) {
   return getScreeningJobRow(jobId);
 }
 
+export async function pauseScreeningJobAfterMarketDataFailures(jobId: string) {
+  await ensureScreeningSchema();
+  const sql = database();
+  const paused = await sql.begin(async (tx) => {
+    const retryBatches = await tx<{ id: string }[]>`
+      UPDATE screening_batches SET status = 'pending', attempts = 0,
+        processed = jsonb_array_length(results), scored = jsonb_array_length(results),
+        lease_until = NULL, lease_token = NULL, finished_at = NULL,
+        error = '股票详情获取失败，等待页面重试'
+      WHERE job_id = ${jobId} AND status = 'completed' AND jsonb_array_length(failed_payload) > 0
+      RETURNING id
+    `;
+    if (!retryBatches.length) return false;
+    const pausedJobs = await tx`
+      UPDATE screening_jobs j SET status = 'paused', stage = '已暂停',
+        processed = totals.processed, scored = totals.scored, failed_count = totals.failed_count,
+        error = '股票详情获取失败，Action 已停止。点击重试后将优先处理失败股票。',
+        elapsed_ms = floor(extract(epoch FROM (now() - j.created_at)) * 1000)::bigint,
+        expires_at = now() + interval '3 days'
+      FROM (
+        SELECT job_id, COALESCE(sum(processed), 0)::integer AS processed,
+          COALESCE(sum(scored), 0)::integer AS scored,
+          COALESCE(sum(failed_count), 0)::integer AS failed_count
+        FROM screening_batches WHERE job_id = ${jobId} GROUP BY job_id
+      ) totals
+      WHERE j.id = totals.job_id AND j.id = ${jobId} AND j.status = 'running'
+      RETURNING j.id
+    `;
+    return pausedJobs.length > 0;
+  });
+  return paused ? getScreeningJobRow(jobId) : null;
+}
+
 export async function claimScreeningBatch(jobId?: string): Promise<ClaimedScreeningBatch | null> {
   await ensureScreeningSchema();
   const sql = database();

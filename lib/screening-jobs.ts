@@ -24,6 +24,7 @@ import {
   loadScreeningAggregation,
   pauseScreeningBatch,
   pauseScreeningJobAfterFailures,
+  pauseScreeningJobAfterMarketDataFailures,
   releaseScreeningInitialization,
   releaseScreeningBatch,
   restartCancelledScreeningJob,
@@ -384,6 +385,17 @@ export async function processNextScreeningBatch(jobId?: string) {
       processed: batch.totalCount, scored: results.length, failedCount: failedSecurities.length,
       failedSecurities, dataDate,
     });
+    if (failedSecurities.length > 0) {
+      await pauseScreeningJobAfterMarketDataFailures(batch.jobId);
+      return {
+        processed: true as const,
+        jobId: batch.jobId,
+        batchId: batch.batchId,
+        completed: false as const,
+        paused: true as const,
+        failedCount: failedSecurities.length,
+      };
+    }
     const completed = await finalizeScreeningJob(batch.jobId, strategy);
     return {
       processed: true as const,
