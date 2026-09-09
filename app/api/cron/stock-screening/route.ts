@@ -23,8 +23,15 @@ export async function GET(request: Request) {
     const result = await prepareScreeningJob(currentStrategy, null, {
       idempotencyKey: `cron:${currentStrategy.strategyId}:${businessDate}`,
       reuseCompleted: false,
+      resumePaused: true,
     });
-    return Response.json({ processed: result.created, restarted: result.restarted ?? false, businessDate, job: result.job }, { status: result.job?.status === "running" ? 202 : 200 });
+    return Response.json({
+      processed: result.created,
+      restarted: result.restarted ?? false,
+      resumed: result.resumed ?? false,
+      businessDate,
+      job: result.job,
+    }, { status: result.job?.status === "running" ? 202 : 200 });
   } catch (error) {
     console.error("Stock screening cron entry failed", error instanceof Error ? error.message : "unknown error");
     return Response.json({ error: "SCREENING_CRON_FAILED" }, { status: 500 });

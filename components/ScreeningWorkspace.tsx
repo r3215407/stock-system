@@ -256,20 +256,20 @@ export default function ScreeningWorkspace() {
   }, [job?.jobId, job?.status, retryDrivingJobId]);
 
   async function retry() {
-    if (!job || starting || (job.status !== "paused" && !(job.status === "completed" && job.failedCount > 0))) return;
+    if (!job || starting || (job.status !== "running" && job.status !== "paused" && !(job.status === "completed" && job.failedCount > 0))) return;
     setStarting(true); setError(null); setSelected([]); setDetail(null);
     try {
       const response = await fetch(`/api/screenings/${job.jobId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: job.status === "paused" ? "continue" : "retry_failures" }),
+        body: JSON.stringify({ action: job.status === "completed" ? "retry_failures" : "continue" }),
       });
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.error?.message ?? `重试接口返回 ${response.status}`);
+      if (!response.ok) throw new Error(payload.error?.message ?? `继续接口返回 ${response.status}`);
       setJob(payload.data);
       setRetryDrivingJobId(payload.data.jobId);
     } catch (caught) {
-      setError(caught instanceof Error ? `重试失败：${caught.message}` : "重试失败，请稍后再试。");
+      setError(caught instanceof Error ? `继续扫描失败：${caught.message}` : "继续扫描失败，请稍后再试。");
     } finally { setStarting(false); }
   }
 
@@ -324,18 +324,25 @@ export default function ScreeningWorkspace() {
   const selectedCandidates = useMemo(() => candidateTop10.filter((item) => selected.includes(item.symbol)), [candidateTop10, selected]);
   const list = tab === "score" ? scoreTop10 : tab === "candidate" ? candidateTop10 : [];
   const generatedTime = recordTime(job?.generatedAt ?? null);
-  const canRetry = job?.status === "paused" || (job?.status === "completed" && job.failedCount > 0);
+  const isDrivenByThisPage = job?.status === "running" && retryDrivingJobId === job.jobId;
+  const canRetry = job?.status === "paused"
+    || (job?.status === "running" && !isDrivenByThisPage)
+    || (job?.status === "completed" && job.failedCount > 0);
   const scanLabel = starting
-    ? "正在重新排队失败数据…"
-    : job?.status === "paused"
+    ? job?.status === "completed" ? "正在重新排队失败数据…" : "正在继续扫描…"
+    : job?.status === "running"
+      ? "继续扫描"
+      : job?.status === "paused"
       ? `重试未完成数据 · ${job.failedCount} 只`
       : `重试失败数据 · ${job?.failedCount ?? 0} 只`;
   const scanStatus = starting
-    ? "正在复用原扫描任务并重新排队失败数据。"
+    ? job?.status === "completed" ? "正在复用原扫描任务并重新排队失败数据。" : "正在由当前页面接管原扫描任务。"
     : job?.status === "running"
       ? browserProgress
         ? `正在重试当前分片：${browserProgress.processed}/${browserProgress.total}。重试期间请保持页面打开。`
-        : `服务端正在执行 ${job.stage}：${job.processed}/${job.afterBasicFilter || "—"}。页面会自动刷新进度，可以安全关闭。`
+        : isDrivenByThisPage
+          ? `当前页面正在执行 ${job.stage}：${job.processed}/${job.afterBasicFilter || "—"}。请保持页面打开。`
+          : `任务处于运行状态：${job.processed}/${job.afterBasicFilter || "—"}。若后台没有继续推进，请点击“继续扫描”并保持页面打开。`
       : job?.status === "paused"
         ? job.pauseFailureCount >= 3
           ? `行情读取累计失败 ${job.pauseFailureCount} 次，已保留当前双榜。可重试失败及未查询股票。`

@@ -2,8 +2,8 @@ name: Daily stock screening
 
 on:
   schedule:
-    # GitHub Actions uses UTC. 07:40 UTC is 15:40 in Asia/Shanghai.
-    - cron: "40 7 * * 1-5"
+    # GitHub Actions uses UTC. Run hourly from 15:40 through 20:40 in Asia/Shanghai.
+    - cron: "40 7-12 * * 1-5"
   workflow_dispatch:
 
 concurrency:
@@ -41,7 +41,7 @@ jobs:
             echo "Start request failed: ${start_response}"
             exit 1
           fi
-          echo "Start: $(jq -c '{processed, restarted, reason, businessDate, job: (.job | {jobId, status, stage})}' <<<"${start_response}")"
+          echo "Start: $(jq -c '{processed, restarted, resumed, reason, businessDate, job: (.job | {jobId, status, stage})}' <<<"${start_response}")"
 
           start_reason="$(jq -r '.reason // empty' <<<"${start_response}")"
           if [[ "${start_reason}" == "NON_TRADING_DAY" || "${start_reason}" == "BEFORE_SCREENING_WINDOW" ]]; then

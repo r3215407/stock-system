@@ -246,7 +246,7 @@ async function finalizeScreeningJob(jobId: string, strategy: StrategyDefinition)
 export async function prepareScreeningJob(
   strategy: StrategyDefinition,
   requestedDate: string | null,
-  options: { idempotencyKey?: string; reuseCompleted?: boolean } = {},
+  options: { idempotencyKey?: string; reuseCompleted?: boolean; resumePaused?: boolean } = {},
 ) {
   const clock = shanghaiClock();
   const scanDate = requestedDate ?? clock.date;
@@ -259,7 +259,13 @@ export async function prepareScreeningJob(
     requestedDate,
     clock.date,
   );
-  if (active) return { job: active, created: false as const };
+  if (active) {
+    if (active.status === "paused" && options.resumePaused) {
+      const resumed = await resumePausedScreeningJob(active.jobId);
+      return { job: resumed ?? active, created: false as const, resumed: resumed?.status === "running" };
+    }
+    return { job: active, created: false as const };
+  }
   if (options.reuseCompleted !== false) {
     const cached = await findReusableScreeningJob(
       strategy.strategyId,
