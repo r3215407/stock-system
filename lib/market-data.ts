@@ -6,6 +6,7 @@ import {
   type MarketDataSnapshot,
   type ScoreModule,
 } from "@/lib/evaluation";
+import { buildTencentDailyKlineParam } from "@/lib/tencent-kline";
 import { floorStockPrice } from "@/lib/stock-strategy-v04";
 
 export type DailyBar = {
@@ -522,7 +523,7 @@ async function fetchEastmoneyBars(normalizedSymbol: string, limit = 320) {
 
 async function fetchTencentBars(normalizedSymbol: string, limit = 320) {
   const securityId = tencentSecurityId(normalizedSymbol);
-  const params = new URLSearchParams({ param: `${securityId},day,,,${limit},qfq` });
+  const params = new URLSearchParams({ param: buildTencentDailyKlineParam(securityId, limit, "qfq") });
   const response = await fetch(`https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?${params}`, {
     cache: "no-store",
     headers: {

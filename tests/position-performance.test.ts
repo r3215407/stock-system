@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { PositionTradeRecord } from "../lib/position-plan.ts";
-import { calculatePortfolioReturnSeries, calculatePortfolioReturnSummary, calculatePositionPerformance } from "../lib/position-performance.ts";
+import { calculateDailyPortfolioReturnSeries, calculatePortfolioReturnSeries, calculatePortfolioReturnSummary, calculatePositionPerformance } from "../lib/position-performance.ts";
 
 function trade(overrides: Partial<PositionTradeRecord> = {}): PositionTradeRecord {
   return {
@@ -97,6 +97,39 @@ test("收益折线按卖出日累计并在最后加入持仓估值", () => {
     ["2026-02-01", 150, "valuation"],
   ]);
   assert.equal(points.at(-1)?.returnRate, 0.015);
+});
+
+test("每日收益折线按收盘估值并在卖出日切换为净收益", () => {
+  const points = calculateDailyPortfolioReturnSeries(10_000, [
+    trade({ purchaseDate: "2026-01-02", exitDate: "2026-01-07", netProfit: 180 }),
+  ], [{
+    symbol: "600001.SH",
+    purchaseDate: "2026-01-05",
+    valuationDate: "2026-01-08",
+    averageCost: 20,
+    currentPrice: 22,
+    actualShares: 50,
+  }], {
+    "600000.SH": [
+      { date: "2026-01-02", close: 10 },
+      { date: "2026-01-05", close: 11 },
+      { date: "2026-01-06", close: 12 },
+      { date: "2026-01-07", close: 13 },
+    ],
+    "600001.SH": [
+      { date: "2026-01-05", close: 20 },
+      { date: "2026-01-07", close: 21 },
+      { date: "2026-01-08", close: 22 },
+    ],
+  });
+  assert.deepEqual(points.map((point) => [point.date, point.cumulativeProfit, point.kind]), [
+    ["2026-01-02", 0, "start"],
+    ["2026-01-05", 100, "daily"],
+    ["2026-01-06", 200, "daily"],
+    ["2026-01-07", 230, "trade"],
+    ["2026-01-08", 280, "valuation"],
+  ]);
+  assert.equal(points.at(-1)?.returnRate, 0.028);
 });
 
 test("没有成交时收益为零且不展示年化", () => {

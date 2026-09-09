@@ -1,6 +1,7 @@
 import "client-only";
 
 import type { DailyBar } from "@/lib/market-data";
+import { buildTencentDailyKlineParam, type TencentPriceAdjustment } from "@/lib/tencent-kline";
 
 type TencentResponse = {
   code: number;
@@ -77,10 +78,10 @@ async function waitForRequestSlot(signal: AbortSignal) {
   }
 }
 
-async function fetchOnce(symbol: string, limit: number, parentSignal: AbortSignal) {
+async function fetchOnce(symbol: string, limit: number, parentSignal: AbortSignal, adjustment: TencentPriceAdjustment) {
   await waitForRequestSlot(parentSignal);
   const securityId = tencentSecurityId(symbol);
-  const params = new URLSearchParams({ param: `${securityId},day,,,${limit},qfq` });
+  const params = new URLSearchParams({ param: buildTencentDailyKlineParam(securityId, limit, adjustment) });
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(new DOMException("行情请求超时", "TimeoutError")), 10_000);
   const abortFromParent = () => controller.abort(parentSignal.reason);
@@ -100,7 +101,9 @@ async function fetchOnce(symbol: string, limit: number, parentSignal: AbortSigna
       );
     }
     const payload = await response.json() as TencentResponse;
-    const rows = payload.data?.[securityId]?.qfqday ?? payload.data?.[securityId]?.day;
+    const rows = adjustment === "qfq"
+      ? payload.data?.[securityId]?.qfqday ?? payload.data?.[securityId]?.day
+      : payload.data?.[securityId]?.day;
     if (payload.code !== 0 || !rows?.length) {
       throw new BrowserMarketDataError("腾讯行情未返回该股票的日线数据", "NOT_FOUND");
     }
@@ -119,11 +122,11 @@ async function fetchOnce(symbol: string, limit: number, parentSignal: AbortSigna
   }
 }
 
-export async function fetchBrowserMarketBars(symbol: string, signal: AbortSignal, limit = 320) {
+export async function fetchBrowserMarketBars(symbol: string, signal: AbortSignal, limit = 320, adjustment: TencentPriceAdjustment = "qfq") {
   let lastError: unknown;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      return await fetchOnce(symbol, limit, signal);
+      return await fetchOnce(symbol, limit, signal, adjustment);
     } catch (error) {
       if (signal.aborted) throw error;
       lastError = error;

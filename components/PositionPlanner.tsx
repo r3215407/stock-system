@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import styles from "@/app/operational.module.css";
+import { fetchBrowserMarketBars } from "@/lib/browser-market-data";
 import type { PositionPlanItemRecord, PositionPlanRecord, PositionTradeRecord } from "@/lib/position-plan";
-import { calculatePortfolioReturnSeries, calculatePortfolioReturnSummary, calculatePositionPerformance, type PortfolioReturnPoint } from "@/lib/position-performance";
+import { calculateDailyPortfolioReturnSeries, calculatePortfolioReturnSummary, calculatePositionPerformance, type PortfolioDailyPrice, type PortfolioReturnPoint } from "@/lib/position-performance";
 import type { HoldingStatus } from "@/lib/position-status";
 import { calculatePositionPlan } from "@/lib/positions";
 
@@ -25,6 +26,9 @@ export default function PositionPlanner({ encodedItems: _encodedItems }: { encod
   const [sellDrafts, setSellDrafts] = useState<Record<string, SellDraft>>({});
   const [message, setMessage] = useState("正在读取共享模拟盘…");
   const [remotePlan, setRemotePlan] = useState<PositionPlanRecord | null>(null);
+  const [dailyPrices, setDailyPrices] = useState<Record<string, PortfolioDailyPrice[]>>({});
+  const [dailyPricesLoading, setDailyPricesLoading] = useState(false);
+  const [dailyPricesError, setDailyPricesError] = useState<string | null>(null);
 
   function acceptPlan(next: PositionPlanRecord) { recordRef.current = next; setRecord(next); dirtyRef.current = false; }
   async function readPlan() {
@@ -60,6 +64,55 @@ export default function PositionPlanner({ encodedItems: _encodedItems }: { encod
     }, 5_000);
     return () => window.clearInterval(timer);
   }, []);
+
+  const dailyPriceRequirements = (() => {
+    const requirements = new Map<string, { symbol: string; earliestDate: string; latestDate: string | null }>();
+    const include = (symbol: string, purchaseDate: string | null, endDate: string | null) => {
+      if (!purchaseDate) return;
+      const current = requirements.get(symbol);
+      requirements.set(symbol, {
+        symbol,
+        earliestDate: current && current.earliestDate < purchaseDate ? current.earliestDate : purchaseDate,
+        latestDate: !endDate || !current?.latestDate ? endDate ?? current?.latestDate ?? null : current.latestDate > endDate ? current.latestDate : endDate,
+      });
+    };
+    record?.history.forEach((trade) => include(trade.symbol, trade.purchaseDate, trade.exitDate));
+    record?.items.filter((item) => item.positionState === "held").forEach((item) => include(item.symbol, item.purchaseDate, null));
+    return [...requirements.values()].sort((left, right) => left.symbol.localeCompare(right.symbol));
+  })();
+  const dailyPriceKey = dailyPriceRequirements.map((requirement) => `${requirement.symbol}:${requirement.earliestDate}:${requirement.latestDate ?? "open"}`).join("|");
+
+  useEffect(() => {
+    const controller = new AbortController();
+    if (!dailyPriceRequirements.length) {
+      setDailyPrices({});
+      setDailyPricesLoading(false);
+      setDailyPricesError(null);
+      return () => controller.abort();
+    }
+    setDailyPrices({});
+    setDailyPricesLoading(true);
+    setDailyPricesError(null);
+    void Promise.allSettled(dailyPriceRequirements.map(async (requirement) => {
+      const bars = await fetchBrowserMarketBars(requirement.symbol, controller.signal, 1500, "none");
+      if (!bars.length || bars[0].date > requirement.earliestDate) throw new Error("买入日期超出行情范围");
+      if (requirement.latestDate && bars.at(-1)!.date < requirement.latestDate) throw new Error("卖出日期缺少行情");
+      return { symbol: requirement.symbol, prices: bars.map(({ date, close }) => ({ date, close })) };
+    })).then((results) => {
+      if (controller.signal.aborted) return;
+      const failures = results.flatMap((result, index) => result.status === "rejected" ? [dailyPriceRequirements[index].symbol] : []);
+      if (failures.length) {
+        setDailyPricesError(`${failures.length} 只股票的历史行情读取失败，请刷新页面重试`);
+        setDailyPrices({});
+      } else {
+        setDailyPrices(Object.fromEntries(results.flatMap((result) => result.status === "fulfilled" ? [[result.value.symbol, result.value.prices]] : [])));
+      }
+      setDailyPricesLoading(false);
+    });
+    return () => controller.abort();
+  // The serialized requirements prevent account-only edits and polling from refetching every symbol.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dailyPriceKey]);
 
   const heldStatusKey = record?.items.filter((item) => item.positionState === "held").map((item) => `${item.id}:${item.averageCost}:${item.actualShares}:${item.purchaseDate}:${item.initialStopPrice}`).join("|") ?? "";
   useEffect(() => {
@@ -109,6 +162,7 @@ export default function PositionPlanner({ encodedItems: _encodedItems }: { encod
   const plan = useMemo(() => calculatePositionPlan({ accountEquity: record?.accountEquity ?? 0, currentOpenRisk: (record?.currentOpenRisk ?? 0) + heldRisk, threeConsecutiveStops: record?.threeConsecutiveStops ?? false, candidates: plannedItems.map((item) => ({ symbol: item.symbol, name: item.name, industry: item.industry, rank: item.priority, score: item.score, entryPrice: item.plannedEntryPrice, initialStopPrice: item.initialStopPrice, existingStockValue: item.existingStockValue, existingIndustryValue: item.existingIndustryValue + (industryHeld.get(item.industry) ?? 0) })) }), [record, heldRisk, plannedItems, industryHeld]);
   const performance = useMemo(() => calculatePositionPerformance(record?.history ?? []), [record?.history]);
   const openPositionMarks = heldItems.map((item) => ({
+    symbol: item.symbol,
     purchaseDate: item.purchaseDate,
     valuationDate: statuses[item.id]?.quoteDate ?? null,
     averageCost: item.averageCost,
@@ -120,11 +174,12 @@ export default function PositionPlanner({ encodedItems: _encodedItems }: { encod
     record?.history ?? [],
     openPositionMarks,
   ), [record?.accountEquity, record?.history, heldStatusKey, statuses]);
-  const returnSeries = useMemo(() => calculatePortfolioReturnSeries(
+  const returnSeries = useMemo(() => calculateDailyPortfolioReturnSeries(
     record?.accountEquity ?? 0,
     record?.history ?? [],
     openPositionMarks,
-  ), [record?.accountEquity, record?.history, heldStatusKey, statuses]);
+    dailyPrices,
+  ), [record?.accountEquity, record?.history, heldStatusKey, statuses, dailyPrices]);
 
   function localItem(id: string, changes: Partial<PositionPlanItemRecord>) { dirtyRef.current = true; setRecord((current) => current ? { ...current, items: current.items.map((item) => item.id === id ? { ...item, ...changes } : item) } : current); }
   async function saveItem(id: string, changes: Record<string, unknown>) {
@@ -191,7 +246,7 @@ export default function PositionPlanner({ encodedItems: _encodedItems }: { encod
       <div><dt>累计收益</dt><dd data-sign={returnSummary.cumulativeProfit >= 0 ? "positive" : "negative"}>{currency(returnSummary.cumulativeProfit)}</dd><small>{percent(returnSummary.cumulativeReturn)} · 已实现与未实现合计</small></div>
       <div><dt>年化收益</dt><dd data-sign={(returnSummary.annualizedReturn ?? 0) >= 0 ? "positive" : "negative"}>{percent(returnSummary.annualizedReturn)}</dd><small>{returnSummary.elapsedDays === null ? "等待有效成交日期" : `按 ${returnSummary.elapsedDays} 个自然日折算`}</small></div>
     </dl>
-    <PortfolioReturnChart points={returnSeries} />
+    <PortfolioReturnChart error={dailyPricesError} loading={dailyPricesLoading} points={returnSeries} />
     <section className={styles.section}><header className={styles.priorityHeader}><div><h2>仓位项目</h2><p>计划与已持有分别计算，已持有市值和保护风险会占用后续计划容量。</p></div><strong>{record.items.length} 只</strong></header>
       {!record.items.length ? <div className={styles.positionEmpty}><h3>尚未加入标的</h3><p>从“今日选股”或“个股评分”加入后会出现在这里。</p><a className={styles.linkButton} href="/evaluate">前往个股评分</a></div> : <div className={styles.positionList}>{record.items.map((item,index) => {
         const planned = plan.items.find((candidate) => candidate.symbol === item.symbol); const status = statuses[item.id]; const draft = heldDrafts[item.id];
@@ -206,12 +261,24 @@ export default function PositionPlanner({ encodedItems: _encodedItems }: { encod
   </div></main>;
 }
 
-function PortfolioReturnChart({ points }: { points: PortfolioReturnPoint[] }) {
+function PortfolioReturnChart({ points, loading, error }: { points: PortfolioReturnPoint[]; loading: boolean; error: string | null }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  if (loading) {
+    return <section className={styles.returnChart} aria-labelledby="portfolio-return-chart-title" aria-live="polite">
+      <header className={styles.returnChartHeader}><div><h2 id="portfolio-return-chart-title">每日收益走势</h2><p>按每个交易日收盘估值</p></div></header>
+      <div className={styles.returnChartEmpty}>正在逐只读取历史行情并计算每日组合收益…</div>
+    </section>;
+  }
+  if (error) {
+    return <section className={styles.returnChart} aria-labelledby="portfolio-return-chart-title" aria-live="polite">
+      <header className={styles.returnChartHeader}><div><h2 id="portfolio-return-chart-title">每日收益走势</h2><p>按每个交易日收盘估值</p></div></header>
+      <div className={styles.returnChartError}>{error}。为避免误导，本次不展示不完整曲线。</div>
+    </section>;
+  }
   if (points.length < 2) {
     return <section className={styles.returnChart} aria-labelledby="portfolio-return-chart-title">
-      <header className={styles.returnChartHeader}><div><h2 id="portfolio-return-chart-title">收益走势</h2><p>按成交与最新估值节点记录</p></div></header>
-      <div className={styles.returnChartEmpty}>录入实际买入日期并获得估值，或完成一笔卖出后，这里显示收益折线。</div>
+      <header className={styles.returnChartHeader}><div><h2 id="portfolio-return-chart-title">每日收益走势</h2><p>按每个交易日收盘估值</p></div></header>
+      <div className={styles.returnChartEmpty}>录入账户净值与实际买入日期后，这里显示每日收益折线。</div>
     </section>;
   }
 
@@ -234,12 +301,18 @@ function PortfolioReturnChart({ points }: { points: PortfolioReturnPoint[] }) {
   const path = points.map((point, index) => `${index ? "L" : "M"}${x(point, index).toFixed(2)},${y(point.returnRate).toFixed(2)}`).join(" ");
   const gridValues = Array.from({ length: 5 }, (_, index) => maximum - (maximum - minimum) * index / 4);
   const latest = points.at(-1)!;
-  const active = points.find((point) => `${point.date}:${point.kind}` === selectedId) ?? latest;
+  const selectedIndex = points.findIndex((point) => `${point.date}:${point.kind}` === selectedId);
+  const activeIndex = selectedIndex >= 0 ? selectedIndex : points.length - 1;
+  const active = points[activeIndex] ?? latest;
   const positive = latest.returnRate >= 0;
+  const selectIndex = (index: number) => {
+    const point = points[Math.max(0, Math.min(points.length - 1, index))];
+    if (point) setSelectedId(`${point.date}:${point.kind}`);
+  };
 
   return <section className={styles.returnChart} aria-labelledby="portfolio-return-chart-title">
     <header className={styles.returnChartHeader}>
-      <div><h2 id="portfolio-return-chart-title">收益走势</h2><p>仅按成交与最新估值节点，不代表逐日净值</p></div>
+      <div><h2 id="portfolio-return-chart-title">每日收益走势</h2><p>已实现净收益与持仓每日收盘估值合计</p></div>
       <div className={styles.returnChartReading} data-sign={active.returnRate >= 0 ? "positive" : "negative"}>
         <span>{active.date} · {active.label}</span>
         <strong>{percent(active.returnRate)}</strong>
@@ -247,27 +320,36 @@ function PortfolioReturnChart({ points }: { points: PortfolioReturnPoint[] }) {
       </div>
     </header>
     <div className={styles.returnChartCanvas}>
-      <svg aria-label={`组合收益从 ${points[0].date} 的 0% 变化至 ${latest.date} 的 ${percent(latest.returnRate)}`} role="group" viewBox={`0 0 ${width} ${height}`}>
+      <svg aria-label={`每日组合收益，使用左右方向键选择交易日；当前为 ${active.date}，${percent(active.returnRate)}`} onKeyDown={(event) => {
+        if (event.key === "ArrowLeft") { event.preventDefault(); selectIndex(activeIndex - 1); }
+        if (event.key === "ArrowRight") { event.preventDefault(); selectIndex(activeIndex + 1); }
+        if (event.key === "Home") { event.preventDefault(); selectIndex(0); }
+        if (event.key === "End") { event.preventDefault(); selectIndex(points.length - 1); }
+      }} onPointerMove={(event) => {
+        const bounds = event.currentTarget.getBoundingClientRect();
+        const viewBoxX = (event.clientX - bounds.left) / bounds.width * width;
+        const ratio = Math.max(0, Math.min(1, (viewBoxX - plot.left) / (width - plot.left - plot.right)));
+        const targetTime = startTime + timeSpan * ratio;
+        let nearestIndex = 0;
+        let nearestDistance = Number.POSITIVE_INFINITY;
+        points.forEach((point, index) => {
+          const distance = Math.abs(Date.parse(`${point.date}T00:00:00Z`) - targetTime);
+          if (distance < nearestDistance) { nearestDistance = distance; nearestIndex = index; }
+        });
+        selectIndex(nearestIndex);
+      }} role="group" tabIndex={0} viewBox={`0 0 ${width} ${height}`}>
         {gridValues.map((value) => <g key={value}>
           <line className={styles.returnChartGrid} x1={plot.left} x2={width - plot.right} y1={y(value)} y2={y(value)} />
           <text className={styles.returnChartAxis} textAnchor="end" x={plot.left - 13} y={y(value) + 4}>{percent(value)}</text>
         </g>)}
         {minimum <= 0 && maximum >= 0 ? <line className={styles.returnChartZero} x1={plot.left} x2={width - plot.right} y1={y(0)} y2={y(0)} /> : null}
         <path className={positive ? styles.returnChartGain : styles.returnChartLoss} d={path} />
-        {points.map((point, index) => {
-          const id = `${point.date}:${point.kind}`;
-          const isActive = id === `${active.date}:${active.kind}`;
-          const select = () => setSelectedId(id);
-          return <g aria-label={`${point.date} ${point.label}，收益 ${percent(point.returnRate)}`} className={styles.returnChartPoint} key={id} onClick={select} onFocus={select} onMouseEnter={select} onKeyDown={(event) => {
-            if (event.key === "Enter" || event.key === " ") { event.preventDefault(); select(); }
-          }} role="button" tabIndex={0}>
-            {isActive ? <circle className={styles.returnChartPointRing} cx={x(point, index)} cy={y(point.returnRate)} r="10" /> : null}
-            <circle className={positive ? styles.returnChartDotGain : styles.returnChartDotLoss} cx={x(point, index)} cy={y(point.returnRate)} r="5" />
-          </g>;
-        })}
+        <line className={styles.returnChartCursor} x1={x(active, activeIndex)} x2={x(active, activeIndex)} y1={plot.top} y2={height - plot.bottom} />
+        <circle className={styles.returnChartPointRing} cx={x(active, activeIndex)} cy={y(active.returnRate)} r="10" />
+        <circle className={active.returnRate >= 0 ? styles.returnChartDotGain : styles.returnChartDotLoss} cx={x(active, activeIndex)} cy={y(active.returnRate)} r="5" />
       </svg>
     </div>
-    <footer className={styles.returnChartDates}><span>{points[0].date}<small>首笔买入</small></span><span>{latest.date}<small>{latest.label}</small></span></footer>
+    <footer className={styles.returnChartDates}><span>{points[0].date}<small>首个估值日</small></span><span>{latest.date}<small>{latest.label}</small></span></footer>
   </section>;
 }
 

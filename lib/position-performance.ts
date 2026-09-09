@@ -38,8 +38,17 @@ export type PortfolioReturnPoint = {
   date: string;
   cumulativeProfit: number;
   returnRate: number;
-  kind: "start" | "trade" | "valuation";
+  kind: "start" | "daily" | "trade" | "valuation";
   label: string;
+};
+
+export type PortfolioDailyPrice = {
+  date: string;
+  close: number;
+};
+
+export type OpenPositionDailyMark = OpenPositionMark & {
+  symbol: string;
 };
 
 function mean(values: number[]) {
@@ -149,6 +158,99 @@ export function calculatePortfolioReturnSeries(
     else points.push(valuationPoint);
   }
   return points;
+}
+
+function cleanDailyPrices(prices: readonly PortfolioDailyPrice[]) {
+  const byDate = new Map<string, PortfolioDailyPrice>();
+  for (const price of prices) {
+    if (dateValue(price.date) !== null && Number.isFinite(price.close) && price.close > 0) byDate.set(price.date, price);
+  }
+  return [...byDate.values()].sort((left, right) => left.date.localeCompare(right.date));
+}
+
+function latestClose(prices: readonly PortfolioDailyPrice[], date: string, fallback: number) {
+  let low = 0;
+  let high = prices.length - 1;
+  let result = fallback;
+  while (low <= high) {
+    const middle = Math.floor((low + high) / 2);
+    const price = prices[middle];
+    if (price.date <= date) {
+      result = price.close;
+      low = middle + 1;
+    } else {
+      high = middle - 1;
+    }
+  }
+  return result;
+}
+
+export function calculateDailyPortfolioReturnSeries(
+  accountEquity: number,
+  trades: PositionTradeRecord[],
+  openPositions: OpenPositionDailyMark[],
+  pricesBySymbol: Record<string, readonly PortfolioDailyPrice[]>,
+): PortfolioReturnPoint[] {
+  if (!(accountEquity > 0)) return [];
+  const validTrades = trades.filter((trade) =>
+    dateValue(trade.purchaseDate) !== null
+    && dateValue(trade.exitDate) !== null
+    && trade.exitDate >= trade.purchaseDate
+    && trade.averageCost > 0
+    && trade.actualShares > 0);
+  const validOpenPositions = openPositions.filter((position) =>
+    dateValue(position.purchaseDate ?? "") !== null
+    && position.averageCost !== null && position.averageCost > 0
+    && position.actualShares !== null && position.actualShares > 0);
+  if (!validTrades.length && !validOpenPositions.length) return [];
+
+  const symbols = new Set([
+    ...validTrades.map((trade) => trade.symbol),
+    ...validOpenPositions.map((position) => position.symbol),
+  ]);
+  const cleanPrices = new Map([...symbols].map((symbol) => [symbol, cleanDailyPrices(pricesBySymbol[symbol] ?? [])]));
+  const dates = new Set<string>();
+  for (const trade of validTrades) {
+    dates.add(trade.purchaseDate);
+    dates.add(trade.exitDate);
+    for (const price of cleanPrices.get(trade.symbol) ?? []) {
+      if (price.date >= trade.purchaseDate && price.date < trade.exitDate) dates.add(price.date);
+    }
+  }
+  for (const position of validOpenPositions) {
+    dates.add(position.purchaseDate!);
+    for (const price of cleanPrices.get(position.symbol) ?? []) {
+      if (price.date >= position.purchaseDate!) dates.add(price.date);
+    }
+  }
+
+  const sortedDates = [...dates].sort();
+  return sortedDates.map((date, index) => {
+    const realizedProfit = validTrades.reduce(
+      (sum, trade) => sum + (trade.exitDate <= date ? trade.netProfit : 0),
+      0,
+    );
+    const closedPositionProfit = validTrades.reduce((sum, trade) => {
+      if (trade.purchaseDate > date || trade.exitDate <= date) return sum;
+      const close = latestClose(cleanPrices.get(trade.symbol) ?? [], date, trade.averageCost);
+      return sum + (close - trade.averageCost) * trade.actualShares;
+    }, 0);
+    const openPositionProfit = validOpenPositions.reduce((sum, position) => {
+      if (position.purchaseDate! > date) return sum;
+      const close = latestClose(cleanPrices.get(position.symbol) ?? [], date, position.averageCost!);
+      return sum + (close - position.averageCost!) * position.actualShares!;
+    }, 0);
+    const cumulativeProfit = realizedProfit + closedPositionProfit + openPositionProfit;
+    const exitCount = validTrades.filter((trade) => trade.exitDate === date).length;
+    const last = index === sortedDates.length - 1;
+    return {
+      date,
+      cumulativeProfit,
+      returnRate: cumulativeProfit / accountEquity,
+      kind: exitCount ? "trade" : last ? "valuation" : index ? "daily" : "start",
+      label: exitCount ? `${exitCount} 笔卖出结算` : last ? "最新收盘" : "每日收盘",
+    };
+  });
 }
 
 export function calculatePortfolioReturnSummary(
