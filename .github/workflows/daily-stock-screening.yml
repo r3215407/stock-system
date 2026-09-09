@@ -75,8 +75,8 @@ jobs:
             failed_count="$(jq -r '.failedCount // 0' <<<"${worker_response}")"
             job_status="$(jq -r '.jobStatus // empty' <<<"${worker_response}")"
             if (( failed_count > 0 )); then
-              echo "Batch ${batch_number} has ${failed_count} stock detail fetch failure(s); stopping immediately."
-              exit 1
+              echo "Batch ${batch_number} has ${failed_count} stock detail fetch failure(s); screening is paused for page retry."
+              exit 0
             fi
             if [[ "${job_status}" == "completed" && ( "${reason}" == "NO_PENDING_BATCH" || "${completed}" == "true" ) ]]; then
               echo "Screening job ${job_id} completed."

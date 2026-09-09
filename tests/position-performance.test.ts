@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { PositionTradeRecord } from "../lib/position-plan.ts";
-import { calculatePortfolioReturnSummary, calculatePositionPerformance } from "../lib/position-performance.ts";
+import { calculatePortfolioReturnSeries, calculatePortfolioReturnSummary, calculatePositionPerformance } from "../lib/position-performance.ts";
 
 function trade(overrides: Partial<PositionTradeRecord> = {}): PositionTradeRecord {
   return {
@@ -77,6 +77,26 @@ test("组合收益合并已实现和当前持仓并按自然日年化", () => {
   assert.equal(summary.cumulativeReturn, 0.019);
   assert.equal(summary.elapsedDays, 30);
   assert.ok(Math.abs((summary.annualizedReturn ?? 0) - ((1.019 ** (365 / 30)) - 1)) < 1e-12);
+});
+
+test("收益折线按卖出日累计并在最后加入持仓估值", () => {
+  const points = calculatePortfolioReturnSeries(10_000, [
+    trade({ purchaseDate: "2026-01-02", exitDate: "2026-01-12", netProfit: 90 }),
+    trade({ id: "00000000-0000-4000-8000-000000000002", purchaseDate: "2026-01-05", exitDate: "2026-01-20", netProfit: -40 }),
+  ], [{
+    purchaseDate: "2026-01-10",
+    valuationDate: "2026-02-01",
+    averageCost: 10,
+    currentPrice: 11,
+    actualShares: 100,
+  }]);
+  assert.deepEqual(points.map((point) => [point.date, point.cumulativeProfit, point.kind]), [
+    ["2026-01-02", 0, "start"],
+    ["2026-01-12", 90, "trade"],
+    ["2026-01-20", 50, "trade"],
+    ["2026-02-01", 150, "valuation"],
+  ]);
+  assert.equal(points.at(-1)?.returnRate, 0.015);
 });
 
 test("没有成交时收益为零且不展示年化", () => {

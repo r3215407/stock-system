@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import styles from "@/app/operational.module.css";
 import type { PositionPlanItemRecord, PositionPlanRecord, PositionTradeRecord } from "@/lib/position-plan";
-import { calculatePortfolioReturnSummary, calculatePositionPerformance } from "@/lib/position-performance";
+import { calculatePortfolioReturnSeries, calculatePortfolioReturnSummary, calculatePositionPerformance, type PortfolioReturnPoint } from "@/lib/position-performance";
 import type { HoldingStatus } from "@/lib/position-status";
 import { calculatePositionPlan } from "@/lib/positions";
 
@@ -108,16 +108,22 @@ export default function PositionPlanner({ encodedItems: _encodedItems }: { encod
   const plannedItems = record?.items.filter((item) => item.positionState === "planned") ?? [];
   const plan = useMemo(() => calculatePositionPlan({ accountEquity: record?.accountEquity ?? 0, currentOpenRisk: (record?.currentOpenRisk ?? 0) + heldRisk, threeConsecutiveStops: record?.threeConsecutiveStops ?? false, candidates: plannedItems.map((item) => ({ symbol: item.symbol, name: item.name, industry: item.industry, rank: item.priority, score: item.score, entryPrice: item.plannedEntryPrice, initialStopPrice: item.initialStopPrice, existingStockValue: item.existingStockValue, existingIndustryValue: item.existingIndustryValue + (industryHeld.get(item.industry) ?? 0) })) }), [record, heldRisk, plannedItems, industryHeld]);
   const performance = useMemo(() => calculatePositionPerformance(record?.history ?? []), [record?.history]);
+  const openPositionMarks = heldItems.map((item) => ({
+    purchaseDate: item.purchaseDate,
+    valuationDate: statuses[item.id]?.quoteDate ?? null,
+    averageCost: item.averageCost,
+    currentPrice: statuses[item.id]?.currentPrice ?? item.averageCost,
+    actualShares: item.actualShares,
+  }));
   const returnSummary = useMemo(() => calculatePortfolioReturnSummary(
     record?.accountEquity ?? 0,
     record?.history ?? [],
-    heldItems.map((item) => ({
-      purchaseDate: item.purchaseDate,
-      valuationDate: statuses[item.id]?.quoteDate ?? null,
-      averageCost: item.averageCost,
-      currentPrice: statuses[item.id]?.currentPrice ?? item.averageCost,
-      actualShares: item.actualShares,
-    })),
+    openPositionMarks,
+  ), [record?.accountEquity, record?.history, heldStatusKey, statuses]);
+  const returnSeries = useMemo(() => calculatePortfolioReturnSeries(
+    record?.accountEquity ?? 0,
+    record?.history ?? [],
+    openPositionMarks,
   ), [record?.accountEquity, record?.history, heldStatusKey, statuses]);
 
   function localItem(id: string, changes: Partial<PositionPlanItemRecord>) { dirtyRef.current = true; setRecord((current) => current ? { ...current, items: current.items.map((item) => item.id === id ? { ...item, ...changes } : item) } : current); }
@@ -185,6 +191,7 @@ export default function PositionPlanner({ encodedItems: _encodedItems }: { encod
       <div><dt>累计收益</dt><dd data-sign={returnSummary.cumulativeProfit >= 0 ? "positive" : "negative"}>{currency(returnSummary.cumulativeProfit)}</dd><small>{percent(returnSummary.cumulativeReturn)} · 已实现与未实现合计</small></div>
       <div><dt>年化收益</dt><dd data-sign={(returnSummary.annualizedReturn ?? 0) >= 0 ? "positive" : "negative"}>{percent(returnSummary.annualizedReturn)}</dd><small>{returnSummary.elapsedDays === null ? "等待有效成交日期" : `按 ${returnSummary.elapsedDays} 个自然日折算`}</small></div>
     </dl>
+    <PortfolioReturnChart points={returnSeries} />
     <section className={styles.section}><header className={styles.priorityHeader}><div><h2>仓位项目</h2><p>计划与已持有分别计算，已持有市值和保护风险会占用后续计划容量。</p></div><strong>{record.items.length} 只</strong></header>
       {!record.items.length ? <div className={styles.positionEmpty}><h3>尚未加入标的</h3><p>从“今日选股”或“个股评分”加入后会出现在这里。</p><a className={styles.linkButton} href="/evaluate">前往个股评分</a></div> : <div className={styles.positionList}>{record.items.map((item,index) => {
         const planned = plan.items.find((candidate) => candidate.symbol === item.symbol); const status = statuses[item.id]; const draft = heldDrafts[item.id];
@@ -197,6 +204,71 @@ export default function PositionPlanner({ encodedItems: _encodedItems }: { encod
     <HistoryLedger trades={record.history} performance={performance} remove={removeHistory} />
     <p className={styles.footerNote}>持仓状态使用完整交易日日线并尽量补充盘中价。历史净收益按佣金 0.03%（最低 5 元）与卖出印花税 0.05%计算；沪深300比较采用买卖日期对应或此前最近收盘。</p>
   </div></main>;
+}
+
+function PortfolioReturnChart({ points }: { points: PortfolioReturnPoint[] }) {
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  if (points.length < 2) {
+    return <section className={styles.returnChart} aria-labelledby="portfolio-return-chart-title">
+      <header className={styles.returnChartHeader}><div><h2 id="portfolio-return-chart-title">收益走势</h2><p>按成交与最新估值节点记录</p></div></header>
+      <div className={styles.returnChartEmpty}>录入实际买入日期并获得估值，或完成一笔卖出后，这里显示收益折线。</div>
+    </section>;
+  }
+
+  const width = 1000;
+  const height = 280;
+  const plot = { left: 72, right: 28, top: 24, bottom: 42 };
+  const values = points.map((point) => point.returnRate);
+  const rawMin = Math.min(0, ...values);
+  const rawMax = Math.max(0, ...values);
+  const padding = Math.max((rawMax - rawMin) * 0.16, 0.005);
+  const minimum = rawMin - padding;
+  const maximum = rawMax + padding;
+  const startTime = Date.parse(`${points[0].date}T00:00:00Z`);
+  const endTime = Date.parse(`${points.at(-1)!.date}T00:00:00Z`);
+  const timeSpan = Math.max(0, endTime - startTime);
+  const x = (point: PortfolioReturnPoint, index: number) => plot.left + (width - plot.left - plot.right) * (
+    timeSpan > 0 ? (Date.parse(`${point.date}T00:00:00Z`) - startTime) / timeSpan : index / Math.max(1, points.length - 1)
+  );
+  const y = (value: number) => plot.top + (height - plot.top - plot.bottom) * (maximum - value) / (maximum - minimum);
+  const path = points.map((point, index) => `${index ? "L" : "M"}${x(point, index).toFixed(2)},${y(point.returnRate).toFixed(2)}`).join(" ");
+  const gridValues = Array.from({ length: 5 }, (_, index) => maximum - (maximum - minimum) * index / 4);
+  const latest = points.at(-1)!;
+  const active = points.find((point) => `${point.date}:${point.kind}` === selectedId) ?? latest;
+  const positive = latest.returnRate >= 0;
+
+  return <section className={styles.returnChart} aria-labelledby="portfolio-return-chart-title">
+    <header className={styles.returnChartHeader}>
+      <div><h2 id="portfolio-return-chart-title">收益走势</h2><p>仅按成交与最新估值节点，不代表逐日净值</p></div>
+      <div className={styles.returnChartReading} data-sign={active.returnRate >= 0 ? "positive" : "negative"}>
+        <span>{active.date} · {active.label}</span>
+        <strong>{percent(active.returnRate)}</strong>
+        <small>{currency(active.cumulativeProfit)}</small>
+      </div>
+    </header>
+    <div className={styles.returnChartCanvas}>
+      <svg aria-label={`组合收益从 ${points[0].date} 的 0% 变化至 ${latest.date} 的 ${percent(latest.returnRate)}`} role="group" viewBox={`0 0 ${width} ${height}`}>
+        {gridValues.map((value) => <g key={value}>
+          <line className={styles.returnChartGrid} x1={plot.left} x2={width - plot.right} y1={y(value)} y2={y(value)} />
+          <text className={styles.returnChartAxis} textAnchor="end" x={plot.left - 13} y={y(value) + 4}>{percent(value)}</text>
+        </g>)}
+        {minimum <= 0 && maximum >= 0 ? <line className={styles.returnChartZero} x1={plot.left} x2={width - plot.right} y1={y(0)} y2={y(0)} /> : null}
+        <path className={positive ? styles.returnChartGain : styles.returnChartLoss} d={path} />
+        {points.map((point, index) => {
+          const id = `${point.date}:${point.kind}`;
+          const isActive = id === `${active.date}:${active.kind}`;
+          const select = () => setSelectedId(id);
+          return <g aria-label={`${point.date} ${point.label}，收益 ${percent(point.returnRate)}`} className={styles.returnChartPoint} key={id} onClick={select} onFocus={select} onMouseEnter={select} onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") { event.preventDefault(); select(); }
+          }} role="button" tabIndex={0}>
+            {isActive ? <circle className={styles.returnChartPointRing} cx={x(point, index)} cy={y(point.returnRate)} r="10" /> : null}
+            <circle className={positive ? styles.returnChartDotGain : styles.returnChartDotLoss} cx={x(point, index)} cy={y(point.returnRate)} r="5" />
+          </g>;
+        })}
+      </svg>
+    </div>
+    <footer className={styles.returnChartDates}><span>{points[0].date}<small>首笔买入</small></span><span>{latest.date}<small>{latest.label}</small></span></footer>
+  </section>;
 }
 
 function HeldDraftForm({draft,setDraft,save}:{draft:HeldDraft;setDraft:(value:HeldDraft)=>void;save:()=>void}) { return <div className={styles.heldDraft}><p>计划股数为 0，请填写真实成交数据后切换。</p><div className={styles.heldFields}><SmallInput label="平均买入成本" value={draft.averageCost} step="0.001" onChange={(value)=>setDraft({...draft,averageCost:value})}/><SmallInput label="实际股数" value={draft.actualShares} step="1" onChange={(value)=>setDraft({...draft,actualShares:value})}/><DateInput label="买入日期" value={draft.purchaseDate} onChange={(value)=>setDraft({...draft,purchaseDate:value})}/><SmallInput label="初始止损" value={draft.initialStopPrice} onChange={(value)=>setDraft({...draft,initialStopPrice:value})}/></div><button className={styles.primaryButton} onClick={save}>保存为已持有</button></div>; }

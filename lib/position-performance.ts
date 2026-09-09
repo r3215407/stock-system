@@ -34,6 +34,14 @@ export type PortfolioReturnSummary = {
   elapsedDays: number | null;
 };
 
+export type PortfolioReturnPoint = {
+  date: string;
+  cumulativeProfit: number;
+  returnRate: number;
+  kind: "start" | "trade" | "valuation";
+  label: string;
+};
+
 function mean(values: number[]) {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
@@ -76,15 +84,79 @@ function dateValue(value: string) {
   return Number.isFinite(time) ? time : null;
 }
 
+function validPositionMarks(openPositions: OpenPositionMark[]) {
+  return openPositions.filter((position) =>
+    position.averageCost !== null && position.averageCost > 0
+    && position.currentPrice !== null && position.currentPrice > 0
+    && position.actualShares !== null && position.actualShares > 0);
+}
+
+export function calculatePortfolioReturnSeries(
+  accountEquity: number,
+  trades: PositionTradeRecord[],
+  openPositions: OpenPositionMark[],
+): PortfolioReturnPoint[] {
+  if (accountEquity <= 0) return [];
+  const validOpenPositions = validPositionMarks(openPositions);
+  const purchaseDates = [
+    ...trades.map((trade) => trade.purchaseDate),
+    ...validOpenPositions.flatMap((position) => position.purchaseDate ? [position.purchaseDate] : []),
+  ].filter((date) => dateValue(date) !== null);
+  if (!purchaseDates.length) return [];
+
+  const startDate = [...purchaseDates].sort()[0];
+  const tradeEvents = new Map<string, { profit: number; count: number }>();
+  for (const trade of trades) {
+    if (dateValue(trade.exitDate) === null) continue;
+    const current = tradeEvents.get(trade.exitDate) ?? { profit: 0, count: 0 };
+    current.profit += trade.netProfit;
+    current.count += 1;
+    tradeEvents.set(trade.exitDate, current);
+  }
+
+  let cumulativeProfit = 0;
+  const points: PortfolioReturnPoint[] = [{
+    date: startDate, cumulativeProfit: 0, returnRate: 0, kind: "start", label: "首笔买入",
+  }];
+  for (const [date, event] of [...tradeEvents].sort(([left], [right]) => left.localeCompare(right))) {
+    cumulativeProfit += event.profit;
+    points.push({
+      date,
+      cumulativeProfit,
+      returnRate: cumulativeProfit / accountEquity,
+      kind: "trade",
+      label: `${event.count} 笔卖出`,
+    });
+  }
+
+  const valuationDates = validOpenPositions.flatMap((position) => position.valuationDate ? [position.valuationDate] : [])
+    .filter((date) => dateValue(date) !== null)
+    .sort();
+  if (valuationDates.length) {
+    const heldProfit = validOpenPositions.reduce(
+      (sum, position) => sum + (position.currentPrice! - position.averageCost!) * position.actualShares!,
+      0,
+    );
+    const valuationPoint: PortfolioReturnPoint = {
+      date: valuationDates.at(-1)!,
+      cumulativeProfit: cumulativeProfit + heldProfit,
+      returnRate: (cumulativeProfit + heldProfit) / accountEquity,
+      kind: "valuation",
+      label: "最新持仓估值",
+    };
+    const last = points.at(-1);
+    if (last?.date === valuationPoint.date) points[points.length - 1] = valuationPoint;
+    else points.push(valuationPoint);
+  }
+  return points;
+}
+
 export function calculatePortfolioReturnSummary(
   accountEquity: number,
   trades: PositionTradeRecord[],
   openPositions: OpenPositionMark[],
 ): PortfolioReturnSummary {
-  const validOpenPositions = openPositions.filter((position) =>
-    position.averageCost !== null && position.averageCost > 0
-    && position.currentPrice !== null && position.currentPrice > 0
-    && position.actualShares !== null && position.actualShares > 0);
+  const validOpenPositions = validPositionMarks(openPositions);
   const heldCost = validOpenPositions.reduce((sum, position) => sum + position.averageCost! * position.actualShares!, 0);
   const heldProfit = validOpenPositions.reduce(
     (sum, position) => sum + (position.currentPrice! - position.averageCost!) * position.actualShares!,
