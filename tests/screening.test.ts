@@ -5,15 +5,33 @@ import {
   accumulateScreeningFailures,
   accumulateScreeningWorkerFailures,
   describeScreeningFailure,
+  getBasicScreeningExclusion,
+  hasMinimumListingTradingDays,
   isChiNextCode,
+  normalizeListingDate,
   rankCandidateResults,
   rankScreeningResults,
   sanitizeScreeningFailure,
   type ScreeningCandidate,
+  type ScreeningSecurity,
 } from "../lib/screening.ts";
 
 function candidate(code: string, score: number, bucket: ScreeningCandidate["bucket"]): ScreeningCandidate {
   return { rank: null, symbol: `${code}.SH`, code, name: code, market: "上海", industry: "测试", bucket, conclusion: bucket === "candidate" ? "候选" : "已排除", score, technicalScore: score, strengthScore: score / 2, stopDistanceRate: 0.05, riskFactor: 1, riskLabel: "正常风险", pressureStatus: "sufficient", averageAmount20: 100_000_000, signalDate: "2026-08-24", entryPrice: 10, initialStopPrice: 9.5, firstReason: "测试", rankingReason: "测试" };
+}
+
+function security(overrides: Partial<ScreeningSecurity> = {}): ScreeningSecurity {
+  return {
+    symbol: "600000.SH",
+    code: "600000",
+    name: "测试股份",
+    market: "上海",
+    latestPrice: 10,
+    latestAmount: 100_000_000,
+    listingDate: "2020-01-01",
+    industry: "测试",
+    ...overrides,
+  };
 }
 
 test("全市场排名返回前10且不按达标桶过滤", () => {
@@ -78,6 +96,34 @@ test("任意行情失败累计到第三次时暂停", () => {
   assert.deepEqual(first, { count: 1, shouldPause: false });
   assert.deepEqual(second, { count: 2, shouldPause: false });
   assert.deepEqual(third, { count: 3, shouldPause: true });
+});
+
+test("上市日期快照支持东方财富数字日期并拒绝无效日期", () => {
+  assert.equal(normalizeListingDate(20251008), "2025-10-08");
+  assert.equal(normalizeListingDate("2025-10-08"), "2025-10-08");
+  assert.equal(normalizeListingDate("2025-02-30"), null);
+  assert.equal(normalizeListingDate("-"), null);
+});
+
+test("只有明确晚于第250个交易日边界的股票才在快照阶段排除", () => {
+  assert.equal(hasMinimumListingTradingDays("2025-09-30", "2025-10-01"), true);
+  assert.equal(hasMinimumListingTradingDays("2025-10-01", "2025-10-01"), true);
+  assert.equal(hasMinimumListingTradingDays("2025-10-02", "2025-10-01"), false);
+  assert.equal(hasMinimumListingTradingDays(null, "2025-10-01"), true);
+});
+
+test("实时快照先排除风险名称、无报价和上市日不足", () => {
+  const options = { useLiveSnapshot: true, oldestRequiredTradingDate: "2025-10-01" };
+  assert.equal(getBasicScreeningExclusion(security({ name: "*ST测试" }), options), "ST / 退市风险");
+  assert.equal(getBasicScreeningExclusion(security({ latestPrice: 0 }), options), "停牌或无有效报价");
+  assert.equal(getBasicScreeningExclusion(security({ listingDate: "2025-10-02" }), options), "上市不足250个交易日");
+  assert.equal(getBasicScreeningExclusion(security(), options), null);
+});
+
+test("历史日期扫描只应用与今天状态无关的板块过滤", () => {
+  const historical = { useLiveSnapshot: false, oldestRequiredTradingDate: "2025-10-01" };
+  assert.equal(getBasicScreeningExclusion(security({ name: "*ST测试", latestPrice: 0, listingDate: "2025-10-02" }), historical), null);
+  assert.equal(getBasicScreeningExclusion(security({ code: "300750", symbol: "300750.SZ" }), historical), "创业板（暂不扫描）");
 });
 
 test("扫描 Worker 连续失败三次后暂停并等待用户继续", () => {

@@ -7,7 +7,9 @@ export type ScreeningSecurity = {
   code: string;
   name: string;
   market: "上海" | "深圳";
+  latestPrice: number;
   latestAmount: number;
+  listingDate: string | null;
   industry: string;
 };
 
@@ -106,6 +108,30 @@ export function accumulateScreeningWorkerFailures(current: number) {
 
 export function isChiNextCode(code: string) {
   return /^(?:300|301)\d{3}$/.test(code);
+}
+
+export function normalizeListingDate(value: unknown) {
+  const digits = String(value ?? "").replace(/\D/g, "");
+  if (digits.length !== 8) return null;
+  const normalized = `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`;
+  const date = new Date(`${normalized}T00:00:00Z`);
+  return Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== normalized ? null : normalized;
+}
+
+export function hasMinimumListingTradingDays(listingDate: string | null, oldestRequiredTradingDate: string | null) {
+  return !listingDate || !oldestRequiredTradingDate || listingDate <= oldestRequiredTradingDate;
+}
+
+export function getBasicScreeningExclusion(
+  security: ScreeningSecurity,
+  options: { useLiveSnapshot: boolean; oldestRequiredTradingDate: string | null },
+) {
+  if (isChiNextCode(security.code)) return "创业板（暂不扫描）";
+  if (!options.useLiveSnapshot) return null;
+  if (/^(?:ST|\*ST|退)/i.test(security.name)) return "ST / 退市风险";
+  if (security.latestPrice <= 0 || security.latestAmount <= 0) return "停牌或无有效报价";
+  if (!hasMinimumListingTradingDays(security.listingDate, options.oldestRequiredTradingDate)) return "上市不足250个交易日";
+  return null;
 }
 
 export function describeScreeningFailure(error: unknown) {

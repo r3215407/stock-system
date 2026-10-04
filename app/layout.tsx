@@ -22,6 +22,9 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
         <span data-surface-contract="etf-rotation-v1" hidden>
           THESIS: 把自动 ETF 轮动呈现为可追溯的已签发账本，拒绝同权重指标卡仪表盘。 OWN-WORLD: 深海军蓝票夹承载运行状态，纸白记录保存账本与交易，复写紫只用于资产和仓位输出，裁角与虚线连接整套凭证。 STORY: 用户先确认今日任务，再核对资产与持仓，随后追溯曲线、交易和固定 ETF 池。 FIRST VIEWPORT: 标题和版本之后依次是运行状态、六项资产指标与当前持仓；只读且没有执行按钮。 FORM: PRD 锁定的操作型轮动账本，沿用既有 Glacier Signal Ticket System，surface seed etf-rotation-v1。 FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
         </span>
+        <span data-surface-contract="macd-513530-v1" hidden>
+          THESIS: 把 513530 次日仓位判断签发为一张先给结论、再核对执行条件的交易票。 OWN-WORLD: 深海军蓝票夹、纸白结论券与复写紫执行检查联，沿用 Glacier Signal 票证系统。 STORY: 用户先看到明日是否新增买入，再核对尾盘执行条件，最后追溯 MACD 与均线依据。 FIRST VIEWPORT: 结论券与执行条件并列，移动端先结论后检查；不把策略信号包装成收益预测。 FORM: 单标的操作型次日计划，surface seed macd-513530-v1。 FINISH: verified with tests, build, and responsive screenshots.
+        </span>
         <AppHeader />
         {children}
       </body>

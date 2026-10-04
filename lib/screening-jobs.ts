@@ -37,7 +37,8 @@ import {
 import {
   SCREENING_FAILURE_PAUSE_THRESHOLD,
   describeScreeningFailure,
-  isChiNextCode,
+  getBasicScreeningExclusion,
+  normalizeListingDate,
   rankCandidateResults,
   rankScreeningResults,
   sanitizeScreeningFailure,
@@ -57,8 +58,23 @@ const SECURITY_WORKERS = Number.isFinite(configuredSecurityWorkers)
 const PROVIDER = "新浪财经/东方财富证券池 + 腾讯证券日线（浏览器直连/服务端兼容）";
 
 type UniverseSecurity = ScreeningBatchSecurity;
-type EastmoneyUniverse = { data?: { total?: number; diff?: Array<{ f12?: string; f13?: number; f14?: string; f6?: number; f100?: string }> } };
-type SinaUniverseItem = { symbol?: string; code?: string; name?: string; amount?: number | string };
+type EastmoneyUniverse = { data?: { total?: number; diff?: Array<{
+  f2?: number | string;
+  f6?: number | string;
+  f12?: string;
+  f13?: number;
+  f14?: string;
+  f26?: number | string;
+  f100?: string;
+}> } };
+type SinaUniverseItem = {
+  symbol?: string;
+  code?: string;
+  name?: string;
+  trade?: number | string;
+  amount?: number | string;
+  listing_date?: number | string;
+};
 
 function errorMessage(error: unknown) {
   return error instanceof Error && error.message ? error.message : "未知网络错误";
@@ -106,7 +122,16 @@ async function fetchSinaUniverse(): Promise<UniverseSecurity[]> {
     const name = item.name?.trim();
     if (!symbol || !code || !name || !/^(?:sh|sz)/.test(symbol) || !/^[036]\d{5}$/.test(code)) return [];
     const market = symbol.startsWith("sh") ? "上海" as const : "深圳" as const;
-    return [{ symbol: `${code}.${market === "上海" ? "SH" : "SZ"}`, code, name, market, latestAmount: Number(item.amount) || 0, industry: "未分类" }];
+    return [{
+      symbol: `${code}.${market === "上海" ? "SH" : "SZ"}`,
+      code,
+      name,
+      market,
+      latestPrice: Number(item.trade) || 0,
+      latestAmount: Number(item.amount) || 0,
+      listingDate: normalizeListingDate(item.listing_date),
+      industry: "未分类",
+    }];
   });
 }
 
@@ -114,7 +139,7 @@ async function fetchEastmoneyUniverse(): Promise<UniverseSecurity[]> {
   async function fetchPage(page: number) {
     const params = new URLSearchParams({
       pn: String(page), pz: "100", po: "1", np: "1", fltt: "2", invt: "2",
-      fid: "f12", fs: "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23", fields: "f12,f13,f14,f6,f100",
+      fid: "f12", fs: "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23", fields: "f2,f6,f12,f13,f14,f26,f100",
     });
     let lastError: unknown;
     for (const host of UNIVERSE_API_HOSTS) {
@@ -149,7 +174,16 @@ async function fetchEastmoneyUniverse(): Promise<UniverseSecurity[]> {
     const name = item.f14?.trim();
     if (!code || !name || !/^[036]\d{5}$/.test(code)) return [];
     const market = item.f13 === 1 ? "上海" as const : "深圳" as const;
-    return [{ symbol: `${code}.${market === "上海" ? "SH" : "SZ"}`, code, name, market, latestAmount: Number(item.f6) || 0, industry: item.f100?.trim() || "未分类" }];
+    return [{
+      symbol: `${code}.${market === "上海" ? "SH" : "SZ"}`,
+      code,
+      name,
+      market,
+      latestPrice: Number(item.f2) || 0,
+      latestAmount: Number(item.f6) || 0,
+      listingDate: normalizeListingDate(item.f26),
+      industry: item.f100?.trim() || "未分类",
+    }];
   });
 }
 
@@ -315,15 +349,19 @@ async function initializeClaimedScreeningJob(initialization: ClaimedScreeningIni
         throw new Error(`中证全指基准行情获取失败：${errorMessage(error)}`);
       }),
     ]);
-    const base = universe.filter((item) => {
-      if (isChiNextCode(item.code)) { exclusions.set("创业板（暂不扫描）", (exclusions.get("创业板（暂不扫描）") ?? 0) + 1); return false; }
-      if (/^(?:ST|\*ST|退)/i.test(item.name)) { exclusions.set("ST / 退市风险", (exclusions.get("ST / 退市风险") ?? 0) + 1); return false; }
-      if (item.latestAmount <= 0) { exclusions.set("停牌或无成交", (exclusions.get("停牌或无成交") ?? 0) + 1); return false; }
-      return true;
-    });
     const benchmarkBars = cleanBars(benchmark.bars);
     const benchmarkIndex = latestCompleteIndex(benchmarkBars, initialization.requestedDate);
     if (benchmarkIndex < 25) throw new Error("中证全指数据不足");
+    const useLiveSnapshot = initialization.requestedDate === null;
+    const oldestRequiredTradingDate = benchmarkIndex >= strategy.universeConfig.minimumListingDays - 1
+      ? benchmarkBars[benchmarkIndex - strategy.universeConfig.minimumListingDays + 1].date
+      : null;
+    const base = universe.filter((item) => {
+      const reason = getBasicScreeningExclusion(item, { useLiveSnapshot, oldestRequiredTradingDate });
+      if (!reason) return true;
+      exclusions.set(reason, (exclusions.get(reason) ?? 0) + 1);
+      return false;
+    });
     const environmentScore = buildMarketEnvironmentModule(benchmarkBars.slice(0, benchmarkIndex + 1)).earned;
     await initializeScreeningBatches({
       jobId: initialization.jobId, universeTotal: universe.length, securities: base, environmentScore,

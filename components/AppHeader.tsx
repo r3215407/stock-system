@@ -13,6 +13,7 @@ const links = [
   { href: "/positions", label: "仓位方案" },
   { href: "/methodology/stock-score", label: "评分规则" },
   { href: "/etf-rotation", label: "ETF 动量轮动" },
+  { href: "/macd-513530", label: "513530 明日计划" },
 ];
 
 function MenuIcon({ open }: { open: boolean }) {
