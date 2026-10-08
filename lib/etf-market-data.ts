@@ -12,12 +12,25 @@ import {
 type EastmoneyListResponse = {
   rc: number;
   data?: {
-    diff?: Array<{
-      f2?: number;
-      f12?: string;
-      f14?: string;
-      f124?: number;
-    }>;
+    diff?: EastmoneyListQuote[];
+  };
+};
+
+type EastmoneyListQuote = {
+  f2?: number | string;
+  f12?: string;
+  f14?: string;
+  f124?: number | string;
+};
+
+type EastmoneyQuoteResponse = {
+  rc: number;
+  data?: null | {
+    f43?: number | string;
+    f57?: string;
+    f58?: string;
+    f59?: number | string;
+    f86?: number | string;
   };
 };
 
@@ -33,6 +46,15 @@ function normalizedSymbol(symbol: string) {
 
 function snapshotSecurityId(symbol: string) {
   return `${symbol.startsWith("5") ? "1" : "0"}.${symbol}`;
+}
+
+function quoteNumber(value: number | string | undefined, divisor = 1) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? number / divisor : 0;
+}
+
+function isUsableQuote(quote: EastmoneyListQuote | undefined) {
+  return quoteNumber(quote?.f2) > 0 && quoteNumber(quote?.f124) > 0;
 }
 
 async function fetchWithRetry(url: string, attempts = 3) {
@@ -64,6 +86,30 @@ async function fetchWithRetry(url: string, attempts = 3) {
     : new RotationDataError("ETF 实时行情暂时不可用。", "INCOMPLETE_POOL");
 }
 
+async function fetchSingleRealtimeQuote(symbol: string): Promise<EastmoneyListQuote> {
+  const params = new URLSearchParams({
+    secid: snapshotSecurityId(symbol),
+    fields: "f43,f57,f58,f59,f86",
+    _: String(Date.now()),
+  });
+  const response = await fetchWithRetry(`https://push2.eastmoney.com/api/qt/stock/get?${params}`);
+  const payload = await response.json() as EastmoneyQuoteResponse;
+  const data = payload.data;
+  const decimals = Number(data?.f59);
+  const divisor = 10 ** (Number.isInteger(decimals) && decimals >= 0 ? decimals : 2);
+  const price = quoteNumber(data?.f43, divisor);
+  const quoteSeconds = quoteNumber(data?.f86);
+  if (payload.rc !== 0 || !data || price <= 0 || quoteSeconds <= 0) {
+    throw new RotationDataError(`${symbol} 实时行情返回内容不完整。`, "INCOMPLETE_POOL");
+  }
+  return {
+    f2: price,
+    f12: data.f57 ?? symbol,
+    f14: data.f58 ?? data.f57 ?? symbol,
+    f124: quoteSeconds,
+  };
+}
+
 async function fetchRealtimeQuotes() {
   const params = new URLSearchParams({
     secids: ETF_POOL.map(snapshotSecurityId).join(","),
@@ -71,14 +117,32 @@ async function fetchRealtimeQuotes() {
     fltt: "2",
     invt: "2",
   });
-  const response = await fetchWithRetry(`https://push2.eastmoney.com/api/qt/ulist.np/get?${params}`);
-  const payload = await response.json() as EastmoneyListResponse;
-  if (payload.rc !== 0 || !payload.data?.diff) {
-    throw new RotationDataError("ETF 实时行情返回内容不完整。", "INCOMPLETE_POOL");
+  const quotes = new Map<string, EastmoneyListQuote>();
+  try {
+    const response = await fetchWithRetry(`https://push2.eastmoney.com/api/qt/ulist.np/get?${params}`);
+    const payload = await response.json() as EastmoneyListResponse;
+    if (payload.rc !== 0 || !payload.data?.diff) {
+      throw new RotationDataError("ETF 实时行情返回内容不完整。", "INCOMPLETE_POOL");
+    }
+    for (const item of payload.data.diff) {
+      if (item.f12) quotes.set(item.f12, item);
+    }
+  } catch (error) {
+    console.warn("ETF rotation batch quote failed", error instanceof Error ? error.message : "unknown error");
   }
-  const quotes = new Map(payload.data.diff.map((item) => [item.f12, item]));
-  if (ETF_POOL.some((symbol) => !quotes.has(symbol))) {
-    throw new RotationDataError("固定 ETF 池未能取得完整实时快照。", "INCOMPLETE_POOL");
+
+  const symbolsNeedingFallback = ETF_POOL.filter((symbol) => !isUsableQuote(quotes.get(symbol)));
+  await Promise.all(symbolsNeedingFallback.map(async (symbol) => {
+    try {
+      quotes.set(symbol, await fetchSingleRealtimeQuote(symbol));
+    } catch (error) {
+      console.warn(`ETF rotation single quote failed for ${symbol}`, error instanceof Error ? error.message : "unknown error");
+    }
+  }));
+
+  const unavailableSymbols = ETF_POOL.filter((symbol) => !isUsableQuote(quotes.get(symbol)));
+  if (unavailableSymbols.length > 0) {
+    throw new RotationDataError(`固定 ETF 池未能取得完整实时快照，缺少 ${unavailableSymbols.join(", ")}。`, "INCOMPLETE_POOL");
   }
   return quotes;
 }
